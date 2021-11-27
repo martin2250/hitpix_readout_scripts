@@ -8,6 +8,7 @@ from cobs import cobs
 import threading
 import queue
 from dataclasses import dataclass, field
+import pylibftdi
 
 Instructions = list[statemachine.Instruction]
 Assembly = list[int]
@@ -211,6 +212,25 @@ class Readout:
             active         = (value & (1 << 17)) != 0,
         )
 
+class FastReadout:
+    def __init__(self) -> None:
+        FT_FLOW_RTS_CTS = 0x0100
+        self.ftdi = pylibftdi.Device('519166548088')
+        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
+        time.sleep(10e-3)
+        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
+        self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
+
+        threading.Thread(target=self.read, daemon=True).start()
+    
+    def read(self) -> None:
+        data = bytearray()
+        while True:
+            data = self.ftdi.read(16*4096)
+            if data:
+                print(data)
+            time.sleep(1e-3)
+
 class DacCard:
     def __init__(self, slot_id: int, num_dacs: int, voltage_supply: float, voltage_max: float, readout: Readout) -> None:
         assert voltage_max <= voltage_supply
@@ -250,8 +270,10 @@ readout.set_shift_ctrl(8)
 voltage_card = DacCard(0, 8, 3.3, 1.8, readout)
 injection_card = DacCard(2, 2, 3.3, 1.8, readout)
 
-for i in range(8):
-    voltage_card.set_voltage(i, 0.2*i)
+fastreadout = FastReadout()
+
+# for i in range(8):
+#     voltage_card.set_voltage(i, 0.2*i)
 
 # readout._write_function_card_raw(b'\xff')
 # readout._write_function_card_raw(b'\x00')
@@ -289,3 +311,12 @@ for i in range(8):
 # # for _ in range(10):
 # #     print(readout.get_sm_status())
 # time.sleep(0.1)
+
+# prog_read = [
+#     statemachine.ShiftOut(8, True),
+#     statemachine.Finish(),
+# ]
+# readout.sm_write(prog_read)
+# readout.sm_start(2)
+
+time.sleep(1)
