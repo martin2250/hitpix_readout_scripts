@@ -33,7 +33,6 @@ class Readout:
     ADDR_TIMER             = 0x00
     ADDR_SM_STATUS         = 0x10
     ADDR_SM_INJECTION_CTRL = 0x11
-    ADDR_SM_SHIFT_CTRL     = 0x12
 
     class ReadoutError(Exception):
         # error codes
