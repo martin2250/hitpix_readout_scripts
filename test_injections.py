@@ -9,8 +9,7 @@ import datetime
 import bitarray
 import sys
 
-port = serial.Serial('/dev/ttyUSB0', 3000000)
-readout = Readout(port)
+readout = Readout('/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
 readout.initialize()
 
 readout.set_injection_ctrl(255, 255)
@@ -48,35 +47,6 @@ readout.sm_write([instr.to_binary() for instr in prog_dac_cfg])
 readout.sm_start()
 
 time.sleep(0.2)
-
-# col_cfg = hitpix1_config.ColumnConfig(0, 2,2, 0)
-# cfg_int = SetCfg(
-#     shift_rx_invert = True,
-#     shift_tx_invert = True,
-#     shift_toggle = False,
-#     shift_select_dac = False,
-#     shift_word_len = 2 * 13,
-#     shift_clk_div = 1,
-#     pins = 0,
-# )
-# prog_col_cfg = [
-#     cfg_int,
-#     Reset(True, True),
-#     Sleep(100),
-#     *hitpix_roprog.prog_shift_dense(col_cfg.generate(), False),
-#     Sleep(100),
-#     cfg_int.set_pin(hitpix_roprog.HitPix1Pins.ro_ldconfig, True),
-#     Sleep(100),
-#     cfg_int,
-#     Finish(),
-# ]
-# readout.sm_write([instr.to_binary() for instr in prog_col_cfg])
-# readout.sm_start()
-
-
-# exit()
-
-
 
 ##################################################################################
 # FULL READOUT

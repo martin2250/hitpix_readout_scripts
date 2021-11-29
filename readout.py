@@ -49,8 +49,8 @@ class Readout:
             code_str = self.errors.get(code, f'0x{code:02X}')
             super().__init__(f'readout error code {code_str}')
 
-    def __init__(self, serial_port: serial.Serial, timeout: float = 0.5) -> None:
-        self._serial_port = serial_port
+    def __init__(self, serial_name: str, timeout: float = 0.5) -> None:
+        self._serial_port = serial.Serial(serial_name, 3_000_000)
         self._response_queue: queue.Queue[Response] = queue.Queue()
         self._thread_read_serial = threading.Thread(target=self._read_serial, daemon=True, name='readout')
         self._thread_read_serial.start()
