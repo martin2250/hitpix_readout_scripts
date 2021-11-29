@@ -91,13 +91,11 @@ for row in range(24):
     readout.sm_exec(hitpix_roprog.prog_rescnt())
 
     col_cfg_inj = hitpix1_config.ColumnConfig(
-        (1 << row) ^ 0b11111000001111111000,
-        (1 << 23) ^ 0b011010100101001010010101, #1 << 0,
+        (1 << row),
+        (1 << 23),
         0,
         24,
     ).generate()
-
-    col_cfg_inj[-20] = 1
 
     prog_inject = hitpix_roprog.prog_inject(100, col_cfg_inj)
     prog_inject.append(Finish())
@@ -111,7 +109,7 @@ for row in range(24):
     readout.sm_write(prog_readout)
     readout.sm_start()
 
-    response.event.wait(0.5)
+    response.event.wait(1.5)
     assert response.data is not None
 
     timestamps, hits = hitpix_roprog.decode_column_packets(response.data)
