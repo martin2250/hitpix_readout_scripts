@@ -21,6 +21,18 @@ class HitPix1VoltageCards(IntEnum):
     threshold = 1
     baseline  = 4
 
+def prog_shift_simple(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
+    '''shift in data_tx, data_tx[0] first'''
+    prog = []
+    data_tx = data_tx.copy()
+    while len(data_tx) > 0:
+        chunk_size = min(len(data_tx), 16)
+        chunk_int = bitarray.util.ba2int(data_tx[:chunk_size])
+        chunk_int <<= 16 - chunk_size # left-align
+        del data_tx[:chunk_size]
+        prog.append(ShiftIn16(chunk_size, shift_out, chunk_int))
+    return prog
+
 def prog_shift_dense(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
     '''shift in data_tx, data_tx[0] first'''
     prog = []
