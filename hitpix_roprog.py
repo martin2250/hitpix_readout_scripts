@@ -1,25 +1,13 @@
 from typing import Union
-import hitpix1_config
 from statemachine import *
 import bitarray, bitarray.util
 import numpy as np
 import unittest
 from dataclasses import dataclass
+from hitpix1 import HitPix1Pins, HitPix1ColumnConfig
 
-class HitPix1Pins(IntEnum):
-    ro_ldconfig = 0
-    ro_psel     = 1
-    ro_penable  = 2
-    ro_ldcnt    = 3
-    ro_rescnt   = 4
-    ro_frame    = 5
-    dac_ld      = 6
-    dac_inv_ck  = 30
-    ro_inv_ck   = 31
 
-class HitPix1VoltageCards(IntEnum):
-    threshold = 1
-    baseline  = 4
+
 
 def prog_shift_simple(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
     '''shift in data_tx, data_tx[0] first'''
@@ -76,10 +64,10 @@ class TestInjection:
     shift_clk_div: int
     
     @staticmethod
-    def _get_cfg_col_injection(inject_row: int, readout_row: int, odd_pixels: bool) -> hitpix1_config.ColumnConfig:
+    def _get_cfg_col_injection(inject_row: int, readout_row: int, odd_pixels: bool) -> HitPix1ColumnConfig:
         mask = int(('01' if odd_pixels else '10') * 12, 2)
         # readout inactive (col 24)
-        return hitpix1_config.ColumnConfig(
+        return HitPix1ColumnConfig(
             inject_row = (1 << inject_row),
             inject_col = mask,
             ampout_col = 0,
@@ -110,7 +98,7 @@ class TestInjection:
         ])
         for row in range(2*24):
             # read out current row after injections
-            cfg_col_readout = hitpix1_config.ColumnConfig(0, 0, 0, row % 24)
+            cfg_col_readout = HitPix1ColumnConfig(0, 0, 0, row % 24)
             # inject into next row in next loop iteration
             row_inj_next = (row + 1) % 24
             odd_pixels_next = (row + 1) >= 24
@@ -161,7 +149,7 @@ class TestInjection:
         prog.append(Finish())
         return prog
 
-def prog_dac_config(cfg_dac: hitpix1_config.DacConfig, shift_clk_div: int = 7) -> list[Instruction]:
+def prog_dac_config(cfg_dac_bin: bitarray.bitarray, shift_clk_div: int = 7) -> list[Instruction]:
     cfg_int = SetCfg(
         shift_rx_invert = False, # rx not used
         shift_tx_invert = True,
@@ -175,7 +163,7 @@ def prog_dac_config(cfg_dac: hitpix1_config.DacConfig, shift_clk_div: int = 7) -
         cfg_int,
         Reset(True, True),
         Sleep(100),
-        *prog_shift_dense(cfg_dac.generate(), False),
+        *prog_shift_dense(cfg_dac_bin, False),
         Sleep(100),
         cfg_int.set_pin(HitPix1Pins.dac_ld, True),
         Sleep(100),
@@ -198,7 +186,7 @@ def prog_rescnt() -> list[Instruction]:
         cfg_int,
     ]
 
-def prog_inject(num_injections: int, cfg_col: Union[hitpix1_config.ColumnConfig, bitarray.bitarray]) -> list[Instruction]:
+def prog_inject(num_injections: int, cfg_col: Union[HitPix1ColumnConfig, bitarray.bitarray]) -> list[Instruction]:
     cfg_int = SetCfg(
         shift_rx_invert = True,
         shift_tx_invert = True,
@@ -245,7 +233,7 @@ def prog_full_readout(shift_clk_div: int) -> list[Instruction]:
     ]
 
     for row in range(25):
-        col_cfg = hitpix1_config.ColumnConfig(0, 0, 0, row)
+        col_cfg = HitPix1ColumnConfig(0, 0, 0, row)
         # add time to make readout more consistent
         if row > 0:
             prog.append(GetTime())

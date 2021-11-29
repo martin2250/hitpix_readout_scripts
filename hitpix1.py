@@ -1,22 +1,52 @@
+from enum import IntEnum
 from dataclasses import dataclass
+import readout
 import bitarray, bitarray.util
 
-def __fill__(name: str, bits: int, names: list[str], default):
-    one = bitarray.bitarray('1')
-    for i in range(bits):
-        c = default()
-        c.__setattr__(name, 1 << i)
-        b = c.generate()
-        if one not in b:
-            print(f'error filling bit {i} of {name}')
-        names[b.index(one)] = f'{name}[{i}]'
+class HitPix1VoltageCards(IntEnum):
+    threshold = 1
+    baseline  = 4
+
+class HitPix1Pins(IntEnum):
+    ro_ldconfig = 0
+    ro_psel     = 1
+    ro_penable  = 2
+    ro_ldcnt    = 3
+    ro_rescnt   = 4
+    ro_frame    = 5
+    dac_ld      = 6
+    dac_inv_ck  = 30
+    ro_inv_ck   = 31
+
+class HitPix1Readout(readout.Readout):
+    def __init__(self, serial_name: str, timeout: float = 0.5) -> None:
+        super().__init__(serial_name, timeout=timeout)
+
+        self.voltage_card = readout.DacCard(0, 8, 3.3, 1.8, self)
+        self.injection_card = readout.DacCard(2, 2, 3.3, 1.8, self)
+
+        invert_pins = 0
+        invert_pins |= 1 << HitPix1Pins.ro_ldconfig
+        invert_pins |= 1 << HitPix1Pins.dac_ld
+        invert_pins |= 1 << 30 # ck 1&2 dac
+        invert_pins |= 1 << 31 # ck 1&2 readout
+        self.write_register(self.ADDR_SM_INVERT_PINS, invert_pins)
+    
+    def set_treshold_voltage(self, voltage: float) -> None:
+        self.voltage_card.set_voltage(HitPix1VoltageCards.threshold, voltage)
+    
+    def set_baseline_voltage(self, voltage: float) -> None:
+        self.voltage_card.set_voltage(HitPix1VoltageCards.baseline, voltage)
+
+    def set_injection_voltage(self, voltage: float) -> None:
+        self.injection_card.set_voltage(0, voltage)
 
 @dataclass
-class ColumnConfig:
-    inject_row: int
-    inject_col: int
-    ampout_col: int
-    rowaddr: int
+class HitPix1ColumnConfig:
+    inject_row: int = 0
+    inject_col: int = 0
+    ampout_col: int = 0
+    rowaddr: int    = 24
 
     def generate(self) -> bitarray.bitarray:
         assert self.rowaddr in range(1 << 5)
@@ -39,31 +69,21 @@ class ColumnConfig:
         b.reverse()
         return b
 
-    @staticmethod
-    def test() -> list[str]:
-        names = ['' for _ in range(13*24)]
-        default = lambda: ColumnConfig(0, 0, 0, 0)
-        __fill__('inject_row', 24, names, default)
-        __fill__('inject_col', 24, names, default)
-        __fill__('ampout_col', 24, names, default)
-        __fill__('rowaddr', 5, names,  default)
-        return names
-
 
 @dataclass
-class DacConfig:
-    q0: int
-    qon: int
-    blres: int
-    vn1: int
-    vnfb: int
-    vnfoll: int
-    vndell: int
-    vn2: int
-    vnbias: int
-    vpload: int
-    vncomp: int
-    vpfoll: int
+class HitPix1DacConfig:
+    q0: int     = 0x01
+    qon: int    = 0x05
+    blres: int  = 63
+    vn1: int    = 30
+    vnfb: int   = 63
+    vnfoll: int = 4
+    vndell: int = 8
+    vn2: int    = 0
+    vnbias: int = 4
+    vpload: int = 3
+    vncomp: int = 5
+    vpfoll: int = 7
 
     def generate(self) -> bitarray.bitarray:
         assert self.q0 in range(1 << 2)
@@ -94,27 +114,3 @@ class DacConfig:
         b.extend(bitarray.util.int2ba(self.q0, 2, endian='little'))
 
         return b
-    
-    @staticmethod
-    def test() -> list[str]:
-        names = ['' for _ in range(66)]
-        default = lambda: DacConfig(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        __fill__('q0', 2, names, default)
-        __fill__('qon', 4, names, default)
-        __fill__('blres', 6, names, default)
-        __fill__('vn1', 6, names,  default)
-        __fill__('vnfb', 6, names, default)
-        __fill__('vnfoll', 6, names, default)
-        __fill__('vndell', 6, names, default)
-        __fill__('vn2', 6, names,  default)
-        __fill__('vnbias', 6, names, default)
-        __fill__('vpload', 6, names, default)
-        __fill__('vncomp', 6, names, default)
-        __fill__('vpfoll', 6, names,  default)
-        return names
-
-
-if __name__ == '__main__':
-    names = DacConfig.test()
-    for i, name in enumerate(names):
-        print(f'{i:3d} {name}')
