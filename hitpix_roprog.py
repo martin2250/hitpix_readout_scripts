@@ -1,3 +1,4 @@
+from typing import Union
 import hitpix1_config
 from statemachine import *
 import bitarray, bitarray.util
@@ -75,7 +76,7 @@ class TestInjection:
 
     def prog_test(self) -> list[Instruction]:
         cfg_int = SetCfg(
-            shift_rx_invert = False,
+            shift_rx_invert = True,
             shift_tx_invert = True,
             shift_toggle = True,
             shift_select_dac = False,
@@ -87,6 +88,7 @@ class TestInjection:
         cfg_col_prep = self._get_cfg_col_injection(0, 24, False)
         prog.extend([
             cfg_int,
+            Sleep(100),
             Reset(True, True),
             *prog_shift_dense(cfg_col_prep.generate(), False),
             Sleep(100),
@@ -157,15 +159,110 @@ def prog_dac_config(cfg_dac: hitpix1_config.DacConfig, shift_clk_div: int = 7) -
         shift_clk_div = shift_clk_div,
         pins = 0,
     )
-    prog = []
-    prog.append(cfg_int)
-    prog.append(Reset(True, True))
-    prog.append(Sleep(100))
-    prog.extend(prog_shift_dense(cfg_dac.generate(), False))
-    prog.append(Sleep(100))
-    prog.append(cfg_int.set_pin(HitPix1Pins.dac_ld, True))
-    prog.append(Sleep(100))
-    prog.append(cfg_int)
+    return [
+        cfg_int,
+        Reset(True, True),
+        Sleep(100),
+        *prog_shift_dense(cfg_dac.generate(), False),
+        Sleep(100),
+        cfg_int.set_pin(HitPix1Pins.dac_ld, True),
+        Sleep(100),
+        cfg_int,
+    ]
+
+def prog_rescnt() -> list[Instruction]:
+    cfg_int = SetCfg(
+        shift_rx_invert = True,
+        shift_tx_invert = True,
+        shift_toggle = True,
+        shift_select_dac = False,
+        shift_word_len = 2 * 13,
+        shift_clk_div = 0,
+        pins = 0,
+    )
+    return [
+        cfg_int.set_pin(HitPix1Pins.ro_rescnt, True),
+        Sleep(10),
+        cfg_int,
+    ]
+
+def prog_inject(num_injections: int, cfg_col: Union[hitpix1_config.ColumnConfig, bitarray.bitarray]) -> list[Instruction]:
+    cfg_int = SetCfg(
+        shift_rx_invert = True,
+        shift_tx_invert = True,
+        shift_toggle = True,
+        shift_select_dac = False,
+        shift_word_len = 2 * 13,
+        shift_clk_div = 2,
+        pins = 0,
+    )
+    cfg_col_bit = cfg_col if isinstance(cfg_col, bitarray.bitarray) else cfg_col.generate()
+    return [
+        cfg_int.set_pin(HitPix1Pins.ro_rescnt, True),
+        Sleep(10),
+        cfg_int,
+        Sleep(10),
+        Reset(True, True),
+        *prog_shift_dense(cfg_col_bit, False),
+        Sleep(200),
+        cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+        Sleep(200),
+        cfg_int,
+        Sleep(500),
+        cfg_int.set_pin(HitPix1Pins.ro_frame, True),
+        Sleep(300),
+        Inject(num_injections),
+        Sleep(300),
+        cfg_int,
+        Sleep(300),
+    ]
+
+def prog_full_readout(shift_clk_div: int) -> list[Instruction]:
+    cfg_int = SetCfg(
+        shift_rx_invert = True,
+        shift_tx_invert = True,
+        shift_toggle = True,
+        shift_select_dac = False,
+        shift_word_len = 2 * 13,
+        shift_clk_div = shift_clk_div,
+        pins = 0,
+    )
+
+    prog: list[Instruction] = [
+        cfg_int,
+    ]
+
+    for row in range(25):
+        col_cfg = hitpix1_config.ColumnConfig(0, 0, 0, row)
+        # add time to make readout more consistent
+        if row > 0:
+            prog.append(GetTime())
+        prog.extend([
+            Sleep(100),
+            Reset(True, True),
+            *prog_shift_dense(col_cfg.generate(), row > 0),
+            Sleep(100),
+            cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+            Sleep(100),
+            cfg_int,
+            Sleep(100),
+        ])
+        if row == 24:
+            break
+        prog.extend([
+            # load count into column register
+            cfg_int.set_pin(HitPix1Pins.ro_ldcnt, True),
+            Sleep(100),
+            cfg_int,
+            Sleep(100),
+            cfg_int.set_pin(HitPix1Pins.ro_penable, True),
+            Sleep(100),
+            ShiftOut(1, False),
+            Sleep(100),
+            cfg_int,
+            Sleep(100),
+        ])
+    
     return prog
 
 def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13, bits_mask: int = 8) -> tuple[np.ndarray, np.ndarray]:

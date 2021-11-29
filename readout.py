@@ -15,6 +15,7 @@ class Response:
     data: Optional[bytes] = None
     event: threading.Event = field(default_factory=lambda: threading.Event())
 
+InstructionsLike = Union[list[int], list[statemachine.Instruction]]
 
 class Readout:
     # commands
@@ -116,14 +117,22 @@ class Readout:
         assert len(response.data) == 4
         return int.from_bytes(response.data, 'little')
     
-    def sm_exec(self, assembly: list[int]) -> None:
-        data = b''.join(code.to_bytes(4, 'little') for code in assembly)
+    def sm_exec(self, assembly: InstructionsLike) -> None:
+        assembly_int = [
+            instr if isinstance(instr, int) else instr.to_binary()
+            for instr in assembly
+        ]
+        data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_EXEC]) + data)
     
-    def sm_write(self, assembly: list[int], offset: int = 0) -> None:
-        data = b''.join(code.to_bytes(4, 'little') for code in assembly)
+    def sm_write(self, assembly: InstructionsLike, offset: int = 0) -> None:
+        assembly_int = [
+            instr if isinstance(instr, int) else instr.to_binary()
+            for instr in assembly
+        ]
+        data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_WRITE]) + offset.to_bytes(2, 'little') + data)
@@ -190,13 +199,16 @@ class Readout:
 
 class FastReadout:
     def __init__(self) -> None:
+        self._response_queue: queue.Queue[Response] = queue.Queue()
+        # open FTDI
         FT_FLOW_RTS_CTS = 0x0100
         self.ftdi = pylibftdi.Device('519166548088')
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
         time.sleep(10e-3)
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
         self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
-        self.packets: list[bytes] = []
+
+        # start RX thread
         threading.Thread(target=self.read, daemon=True, name='fastreadout').start()
     
     def read(self) -> None:
@@ -213,7 +225,18 @@ class FastReadout:
             index = buffer.rindex(b'\x00')
             packets = buffer[:index].split(b'\x00')
             del buffer[:index+1]
-            self.packets.extend(cobs.decode(packet) for packet in packets)
+            for packet in packets:
+                try:
+                    response = self._response_queue.get(False)
+                    response.data = cobs.decode(packet)
+                    response.event.set()
+                except queue.Empty:
+                    print('received unexpected response', packet)
+    
+    def expect_response(self) -> Response:
+        response = Response()
+        self._response_queue.put(response)
+        return response
 
 class DacCard:
     def __init__(self, slot_id: int, num_dacs: int, voltage_supply: float, voltage_max: float, readout: Readout) -> None:
