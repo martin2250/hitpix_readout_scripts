@@ -1,22 +1,35 @@
-from typing import Iterable
 import hitpix1_config
 from statemachine import *
 import bitarray, bitarray.util
-import dataclasses
 import numpy as np
 import unittest
+from dataclasses import dataclass
+
+class HitPix1Pins(IntEnum):
+    ro_ldconfig = 0
+    ro_psel     = 1
+    ro_penable  = 2
+    ro_ldcnt    = 3
+    ro_rescnt   = 4
+    ro_frame    = 5
+    dac_ld      = 6
+    dac_inv_ck  = 30
+    ro_inv_ck   = 31
+
+class HitPix1VoltageCards(IntEnum):
+    threshold = 1
+    baseline  = 4
 
 def prog_shift_dense(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
     '''shift in data_tx, data_tx[0] first'''
     prog = []
-    chunk_size = 24
     data_tx = data_tx.copy()
     while len(data_tx) > 0:
         # fewer than or exactly 16 bits remaining? use ShiftIn16
         if len(data_tx) <= 16:
-            chunk_int = bitarray.util.ba2int(data_tx[:chunk_size])
+            chunk_int = bitarray.util.ba2int(data_tx)
             chunk_int <<= 16 - len(data_tx) # left-align
-            prog.append(ShiftIn16(chunk_size, shift_out, chunk_int))
+            prog.append(ShiftIn16(len(data_tx), shift_out, chunk_int))
             break
         # check for long run of zeros at the start of the array
         leading_zeros = data_tx.index(1) if (1 in data_tx) else len(data_tx)
@@ -45,7 +58,7 @@ def prog_shift_dense(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instru
     return prog
 
 @dataclass
-class InjectionTest:
+class TestInjection:
     num_injections: int
     shift_clk_div: int
     
@@ -63,7 +76,7 @@ class InjectionTest:
     def prog_test(self) -> list[Instruction]:
         cfg_int = SetCfg(
             shift_rx_invert = False,
-            shift_tx_invert = False,
+            shift_tx_invert = True,
             shift_toggle = True,
             shift_select_dac = False,
             shift_word_len = 2 * 13,
@@ -73,9 +86,12 @@ class InjectionTest:
         prog = []
         cfg_col_prep = self._get_cfg_col_injection(0, 24, False)
         prog.extend([
+            cfg_int,
             Reset(True, True),
             *prog_shift_dense(cfg_col_prep.generate(), False),
+            Sleep(100),
             cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+            Sleep(100),
             cfg_int,
         ])
         for row in range(2*24):
@@ -88,50 +104,71 @@ class InjectionTest:
             prog.extend([
                 # reset counter
                 cfg_int.set_pin(HitPix1Pins.ro_rescnt, True),
+                Sleep(100),
                 cfg_int,
+                Sleep(100),
                 # set frame high and inject
                 cfg_int.set_pin(HitPix1Pins.ro_frame, True),
+                Sleep(100),
                 Inject(self.num_injections),
+                Sleep(100),
                 cfg_int,
+                Sleep(100),
                 # shift in column config for readout
                 Reset(True, True),
                 *prog_shift_dense(cfg_col_readout.generate(), False),
+                Sleep(100),
                 cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+                Sleep(100),
                 cfg_int,
+                Sleep(100),
                 # load count into column register
                 cfg_int.set_pin(HitPix1Pins.ro_ldcnt, True),
+                Sleep(100),
                 cfg_int,
+                Sleep(100),
                 cfg_int.set_pin(HitPix1Pins.ro_penable, True),
+                Sleep(100),
                 ShiftOut(1, False),
+                Sleep(100),
                 cfg_int,
+                Sleep(100),
                 # add time to make readout more consistent
                 GetTime(),
                 # read out data while shifting in configuration for the next round of injections
                 Reset(True, True),
                 *prog_shift_dense(cfg_col_inj_next.generate(), True),
+                Sleep(100),
                 cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+                Sleep(100),
                 cfg_int,
+                Sleep(100),
             ])
+        prog.append(Finish())
         return prog
 
-def prog_dac_config(cfg_dac: hitpix1_config.DacConfig, cfg: SetCfg) -> list[Instruction]:
-    cfg_int = cfg.modify(
-        shift_tx_invert = False,
+def prog_dac_config(cfg_dac: hitpix1_config.DacConfig, shift_clk_div: int = 7) -> list[Instruction]:
+    cfg_int = SetCfg(
+        shift_rx_invert = False, # rx not used
+        shift_tx_invert = True,
         shift_toggle = False,
         shift_select_dac = True,
-        shift_clk_div = 5,
-    ).set_pin(HitPix1Pins.dac_ld, False)
+        shift_word_len = 31, # rx not used
+        shift_clk_div = shift_clk_div,
+        pins = 0,
+    )
     prog = []
     prog.append(cfg_int)
+    prog.append(Reset(True, True))
     prog.append(Sleep(100))
     prog.extend(prog_shift_dense(cfg_dac.generate(), False))
     prog.append(Sleep(100))
     prog.append(cfg_int.set_pin(HitPix1Pins.dac_ld, True))
     prog.append(Sleep(100))
-    prog.append(cfg)
+    prog.append(cfg_int)
     return prog
 
-def decode_column_packets(packet: bytes, columns: int = 24, bits: int = 13) -> tuple[np.ndarray, np.ndarray]:
+def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13, bits_mask: int = 8) -> tuple[np.ndarray, np.ndarray]:
     '''decode column packets with timestamps'''
     # check that packet has right size for 32 bit ints
     assert (len(packet) % 4) == 0
@@ -145,9 +182,9 @@ def decode_column_packets(packet: bytes, columns: int = 24, bits: int = 13) -> t
     # get hits
     hits_raw = data[:, 1:].flat
     # duplicate all numbers to extract both <bits> bit values
-    bit_mask = (1 << bits) - 1
+    bit_mask = (1 << bits_mask) - 1
     hits = np.dstack((
-        np.bitwise_and(np.right_shift(hits_raw, 13), bit_mask),
+        np.bitwise_and(np.right_shift(hits_raw, bits_shift), bit_mask),
         np.bitwise_and(hits_raw, bit_mask),
     ))
     hits = np.reshape(hits, (-1, columns))
@@ -172,7 +209,7 @@ class DecodeTest(unittest.TestCase):
 
 if __name__ == '__main__':
     # unittest.main()
-    prog = InjectionTest(64, 2).prog_test()
+    prog = TestInjection(64, 2).prog_test()
     for instr in prog:
         print(instr)
     print(len(prog))

@@ -36,6 +36,7 @@ class ColumnConfig:
             inj_sub = b_inject_row[i_inj:i_inj+5]
             b[i_cfg:i_cfg+len(inj_sub)] = inj_sub
 
+        b.reverse()
         return b
 
     @staticmethod
@@ -79,18 +80,18 @@ class DacConfig:
         assert self.vpfoll in range(1 << 6)
 
         b = bitarray.bitarray()
-        b.extend(bitarray.util.int2ba(self.q0, 2, endian='little'))
-        b.extend(bitarray.util.int2ba(self.qon, 4, endian='little'))
-        b.extend(bitarray.util.int2ba(self.blres, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vn1, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vnfb, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vnfoll, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vndell, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vn2, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vnbias, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vpload, 6, endian='big'))
-        b.extend(bitarray.util.int2ba(self.vncomp, 6, endian='big'))
         b.extend(bitarray.util.int2ba(self.vpfoll, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vncomp, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vpload, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vnbias, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vn2, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vndell, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vnfoll, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vnfb, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.vn1, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.blres, 6, endian='big'))
+        b.extend(bitarray.util.int2ba(self.qon, 4, endian='little'))
+        b.extend(bitarray.util.int2ba(self.q0, 2, endian='little'))
 
         return b
     

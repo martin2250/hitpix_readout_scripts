@@ -171,13 +171,3 @@ class Wait(Instruction):
     '''wait for external signal with id <signal_number> to read <signal_value>'''
     signal_number: int
     signal_value: bool
-
-
-class HitPix1Pins(IntEnum):
-    ro_ldconfig = 0
-    ro_psel     = 1
-    ro_penable  = 2
-    ro_ldcnt    = 3
-    ro_rescnt   = 4
-    ro_frame    = 5
-    dac_ld      = 6
