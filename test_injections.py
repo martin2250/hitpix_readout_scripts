@@ -37,8 +37,12 @@ prog_readout = hitpix_roprog.prog_full_readout(1)
 prog_readout.append(Finish())
 ro.sm_write(prog_readout)
 
+rows = 24
+
 lines = []
-for row in range(24):
+responses = [fastreadout.expect_response() for _ in range(rows)]
+
+for row in range(rows):
     col_cfg_inj = HitPix1ColumnConfig(
         (1 << row),
         (1 << 23),
@@ -46,37 +50,24 @@ for row in range(24):
         24,
     ).generate()
     ro.sm_exec(hitpix_roprog.prog_inject(100, col_cfg_inj))
-
-    response = fastreadout.expect_response()
     ro.sm_start()
 
+    while True:
+        status = ro.get_sm_status()
+        if status.idle:
+            break
+
+for response in responses:
     response.event.wait(1.5)
+
+for row, response in enumerate(responses):
     assert response.data is not None
 
-    lines.append('-'*30 + f'{row:4d}   ' + '-'*30)
+    print('-'*30 + f'{row:4d}   ' + '-'*30)
     timestamps, hits = hitpix_roprog.decode_column_packets(response.data)
     for timestamp, hit, row_ro in zip(timestamps, hits, range(100)):
         hit = (256 - hit) % 256
         dt = datetime.datetime.fromtimestamp(ro.convert_time(timestamp)).time()
         if row == row_ro:
             dt = '---------------'
-        lines.append(f'{row_ro:2d} {dt}' + ' '.join(f'{h:3d}' for h in hit))
-
-for line in lines:
-    print(line, flush=False)
-print('------')
-
-##################################################################################
-# INJETCIONS
-
-# test_injection = hitpix_roprog.TestInjection(30, 1)
-# prog_injection = test_injection.prog_test()
-
-# readout.sm_write([instr.to_binary() for instr in prog_injection])
-
-# # only works with 1-4 right now?
-# readout.sm_start(1)
-
-##################################################################################
-
-
+        print(f'{row_ro:2d} {dt}' + ' '.join(f'{h:3d}' for h in hit))
