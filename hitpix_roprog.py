@@ -285,6 +285,7 @@ def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13
         np.bitwise_and(hits_raw, bit_mask),
     ))
     hits = np.reshape(hits, (-1, columns))
+    # counter count down
     return timestamps, hits
 
 class DecodeTest(unittest.TestCase):

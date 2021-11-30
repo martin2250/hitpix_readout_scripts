@@ -168,9 +168,16 @@ class Readout:
         self.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
     
     def initialize(self) -> None:
-        # set all enable pins high
-        self._write_function_card_raw(b'\xff')
-        self.synchronize()
+        try:
+            # set all enable pins high
+            self._write_function_card_raw(b'\xff')
+            self.synchronize()
+        except TimeoutError as err:
+            msg = '| failed to initialize, is the FPGA configured? |'
+            print('-' * len(msg))
+            print(msg)
+            print('-' * len(msg))
+            raise err
 
     def write_function_card(self, slot_id: int, data: bytes) -> None:
         assert slot_id in range(8)
@@ -196,6 +203,12 @@ class Readout:
             idle           = (value & (1 << 16)) != 0,
             active         = (value & (1 << 17)) != 0,
         )
+    
+    def wait_sm_idle(self, timeout: float = 1.) -> None:
+        t_timeout = time.monotonic() + timeout
+        while not self.get_sm_status().idle:
+            if time.monotonic() > t_timeout:
+                raise TimeoutError('statemachine not idle')
 
 class FastReadout:
     def __init__(self) -> None:
@@ -212,6 +225,9 @@ class FastReadout:
         threading.Thread(target=self.read, daemon=True, name='fastreadout').start()
     
     def read(self) -> None:
+        # clear buffer
+        while self.ftdi.read(16*4096):
+            pass
         buffer = bytearray()
         while True:
             data_new = self.ftdi.read(16*4096)
@@ -249,6 +265,7 @@ class DacCard:
         self.readout = readout
     
     def update(self) -> None:
+        '''voltage needs about 3ms to stabilize (almost linear ramp up)'''
         code_max = (1 << 14) - 1
         data = bytearray()
         for i, voltage in enumerate(reversed(self.voltages)):
