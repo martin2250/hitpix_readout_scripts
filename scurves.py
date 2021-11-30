@@ -6,7 +6,8 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional, cast, Union, Any
+import scipy.optimize
 
 import h5py
 import numpy as np
@@ -23,7 +24,7 @@ from statemachine import *
 @dataclass
 class SCurveConfig:
     dac_cfg: HitPix1DacConfig
-    injection_voltages: list[float]
+    injection_voltage: list[float]
     injections_per_round: int
     injections_total: int
     voltage_baseline: float
@@ -51,8 +52,8 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
 
     ro.set_injection_ctrl(250, 250)
 
-    ro.set_treshold_voltage(config.voltage_baseline)
-    ro.set_baseline_voltage(config.voltage_threshold)
+    ro.set_treshold_voltage(config.voltage_threshold)
+    ro.set_baseline_voltage(config.voltage_baseline)
 
     ro.sm_exec(hitpix_roprog.prog_dac_config(config.dac_cfg.generate(), 7))
 
@@ -76,10 +77,10 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     responses = []
 
     if progress is not None:
-        progress.total = len(config.injection_voltages)
+        progress.total = len(config.injection_voltage)
 
     # test all voltages
-    for injection_voltage in config.injection_voltages:
+    for injection_voltage in config.injection_voltage:
         if progress is not None:
             progress.update()
             progress.set_postfix(v=f'{injection_voltage:0.2f}')
@@ -155,7 +156,6 @@ def load_scurve(h5group: h5py.Group) -> tuple[SCurveConfig, np.ndarray, np.ndarr
 
     return config, hits_signal, hits_noise
 
-
 if __name__ == '__main__':
     ############################################################################
 
@@ -164,6 +164,12 @@ if __name__ == '__main__':
     parser.add_argument(
         'output_file',
         help='h5 output file',
+    )
+
+    parser.add_argument(
+        '--h5group',
+        default='scurve',
+        help='h5 group name',
     )
 
     args = parser.parse_args()
@@ -179,11 +185,11 @@ if __name__ == '__main__':
     ############################################################################
 
     config = SCurveConfig(
-        injection_voltages=list(np.linspace(0.2, 1.6, 50)),
+        injection_voltage=list(np.linspace(0.2, 1.6, 10)),
         injections_per_round=50,
         injections_total=500,
         voltage_baseline=1.1,
-        voltage_threshold=1.2,
+        voltage_threshold=1.3,
         dac_cfg=HitPix1DacConfig(),
     )
 
@@ -199,5 +205,5 @@ if __name__ == '__main__':
         ro, fastreadout, config, tqdm.tqdm())
 
     with h5py.File(path_output, 'w') as file:
-        group = file.create_group('scurve')
+        group = file.create_group(args.h5group)
         save_scurve(group, config, hits_signal, hits_noise)
