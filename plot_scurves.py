@@ -34,12 +34,12 @@ def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[
         print(injection_voltage.shape, efficiency.shape)
     assert injection_voltage.shape == efficiency.shape
     # check for dead / noisy pixels
-    if sum(efficiency > 0.5) == 0: # dead
+    if sum(efficiency > 0.3) == 0: # dead
         return np.inf, np.nan
-    if sum(efficiency < 0.5) == 0: # noisy
+    if sum(efficiency < 0.7) == 0: # noisy
         return -np.inf, np.nan
     # get starting values
-    i_threshold = np.argmax(efficiency > 0.5)
+    i_threshold = np.argmax(efficiency > 0.5*(np.min(efficiency) + np.max(efficiency)))
     threshold_0 = injection_voltage[i_threshold]
     # fit
     (threshold, noise), _ = cast(
@@ -48,6 +48,7 @@ def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[
             fitfunc_sigmoid_inv,
             injection_voltage,
             efficiency,
+            sigma=2-efficiency*(1-efficiency),
             p0=(threshold_0, 100),
             xtol=1e-3,
             gtol=1e-4,

@@ -108,6 +108,9 @@ if __name__ == '__main__':
     for idx, result in tqdm.tqdm(zip(scan_indices(), results)):
         threshold[idx], noise[idx] = result
 
+    # convert noise to mV
+    noise *= 1e3
+
     ################################################################################
 
     fig = plt.gcf()
@@ -158,6 +161,9 @@ if __name__ == '__main__':
         threshold[idx_scan].flat, bins=30, range=range_threshold)
     _, bins_noise, bars_noise = ax_hnoise.hist(
         noise[idx_scan].flat, bins=30, range=range_noise)
+    
+    ax_hthresh.set_xlabel('Threshold (V)')
+    ax_hnoise.set_xlabel('Noise (mV)')
 
     def redraw_hists():
         data_threshold, _ = np.histogram(
@@ -181,6 +187,8 @@ if __name__ == '__main__':
         vmin=range_noise[0],
         vmax=range_noise[1],
     )
+    ax_thresh.set_title('Threshold (V)')
+    ax_noise.set_title('Noise (mV)')
 
     fig.colorbar(im_thresh, ax=ax_thresh)
     fig.colorbar(im_noise, ax=ax_noise)
@@ -192,18 +200,22 @@ if __name__ == '__main__':
     # plot scurve
     x_fit = np.linspace(np.min(config.injection_voltage),
                         np.max(config.injection_voltage), 200)
-    y_fit = plot_scurves.fitfunc_sigmoid(
-        x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
     line_data, = ax_curve.plot(
-        config.injection_voltage, efficiency[idx_scan+(...,)+idx_pixel], 'x')
-    line_fit, = ax_curve.plot(x_fit, y_fit, 'r')
+        config.injection_voltage, config.injection_voltage, 'x')
+    line_fit, = ax_curve.plot(x_fit, x_fit, 'r')
     ax_curve.set_ylim(0, 1)
+    ax_curve.set_xlabel('Injection Voltage (V)')
+    ax_curve.set_ylabel('Efficiency')
 
     def redraw_curve():
         y_fit = plot_scurves.fitfunc_sigmoid(
-            x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
+            x_fit,
+            threshold[idx_scan + idx_pixel],
+            1e-3*noise[idx_scan + idx_pixel]
+        )
         line_data.set_ydata(efficiency[idx_scan+(...,)+idx_pixel])
         line_fit.set_ydata(y_fit)
+    redraw_curve()
 
     # add change handler
 
