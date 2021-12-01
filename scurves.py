@@ -144,8 +144,8 @@ def save_scurve(h5group: h5py.Group, config: SCurveConfig, hits_signal: np.ndarr
     h5group.attrs['save_time'] = datetime.datetime.now().isoformat()
     h5group.attrs['config'] = json.dumps(config.asdict())
     # data
-    h5group.create_dataset('hits_signal', data=hits_signal)
-    h5group.create_dataset('hits_noise', data=hits_noise)
+    h5group.create_dataset('hits_signal', data=hits_signal, compression='gzip')
+    h5group.create_dataset('hits_noise', data=hits_noise, compression='gzip')
 
 
 def load_scurve(h5group: h5py.Group) -> tuple[SCurveConfig, np.ndarray, np.ndarray]:
