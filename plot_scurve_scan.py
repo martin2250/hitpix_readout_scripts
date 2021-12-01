@@ -1,26 +1,23 @@
 #!/usr/bin/python
-import dataclasses
-import datetime
-import typing
-import h5py
-import time
-import tqdm
-from dataclasses import dataclass
 import argparse
-import scipy.optimize
-from typing import Literal, SupportsIndex, cast, Any, Union
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
+from typing import SupportsIndex, cast
+
+import h5py
 import matplotlib.pyplot as plt
-import scurves
+import numpy as np
+import tqdm
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent
-from concurrent.futures import ProcessPoolExecutor
-from matplotlib.widgets import Slider, Button
-import plot_scurves
+from matplotlib.widgets import Slider
 
-import numpy as np
+import plot_scurves
+import scurves
 
 ################################################################################
 # multithreaded fitting
+
 
 @dataclass
 class FitJob:
@@ -66,7 +63,7 @@ if __name__ == '__main__':
         # store first scurve
         hits_signal[tuple(0 for _ in scan_shape) + (...,)] = hits_signal_first
         # store remaining scurves
-        scan_indices = lambda: np.ndindex(cast(SupportsIndex, scan_shape))
+        def scan_indices(): return np.ndindex(cast(SupportsIndex, scan_shape))
         for idx in scan_indices():
             # do not load zeroth scurve
             if not any(idx):
@@ -81,16 +78,18 @@ if __name__ == '__main__':
 
     sensor_size = hits_signal_first.shape[1:]
     # pixel edges for pcolormesh
-    pixel_edges = pixel_edges = cast(tuple[np.ndarray, np.ndarray], tuple(np.arange(size + 1) - 0.5 for size in sensor_size))
+    pixel_edges = pixel_edges = cast(tuple[np.ndarray, np.ndarray], tuple(
+        np.arange(size + 1) - 0.5 for size in sensor_size))
     # pixel indices
-    pixel_pos = np.meshgrid(*(np.array(np.arange(size)) for size in sensor_size))
+    pixel_pos = np.meshgrid(*(np.array(np.arange(size))
+                            for size in sensor_size))
 
     ################################################################################
     # calculate pixel properties
 
     # shape of result
     shape_res = list(hits_signal.shape)
-    del shape_res[-3] # injection voltage axis
+    del shape_res[-3]  # injection voltage axis
     shape_res = tuple(shape_res)
 
     # result arrays
@@ -98,7 +97,9 @@ if __name__ == '__main__':
     efficiency = hits_signal / config.injections_total
 
     # each set of parameters is a separate job
-    fit_jobs = (FitJob(config.injection_voltage, efficiency[idx]) for idx in scan_indices())
+    fit_jobs = (FitJob(config.injection_voltage,
+                efficiency[idx]) for idx in scan_indices())
+
     def fit_job(job: FitJob):
         return plot_scurves.fit_sigmoids(job.injection_voltage, job.efficiency)
     results = ProcessPoolExecutor().map(fit_job, fit_jobs)
@@ -153,11 +154,14 @@ if __name__ == '__main__':
     range_noise = np.min(noise_clean), np.max(noise_clean)
 
     # plot histograms
-    _, bins_threshold, bars_threshold = ax_hthresh.hist(threshold[idx_scan].flat, bins=30, range=range_threshold)
-    _, bins_noise, bars_noise = ax_hnoise.hist(noise[idx_scan].flat, bins=30, range=range_noise)
+    _, bins_threshold, bars_threshold = ax_hthresh.hist(
+        threshold[idx_scan].flat, bins=30, range=range_threshold)
+    _, bins_noise, bars_noise = ax_hnoise.hist(
+        noise[idx_scan].flat, bins=30, range=range_noise)
 
     def redraw_hists():
-        data_threshold, _ = np.histogram(threshold[idx_scan].flat, bins=bins_threshold)
+        data_threshold, _ = np.histogram(
+            threshold[idx_scan].flat, bins=bins_threshold)
         data_noise, _ = np.histogram(noise[idx_scan].flat, bins=bins_noise)
         for value, bar in zip(data_threshold, bars_threshold):
             bar.set_height(value)
@@ -168,12 +172,12 @@ if __name__ == '__main__':
 
     # plot maps
     im_thresh = ax_thresh.imshow(
-        threshold[idx_scan],
+        threshold[idx_scan].T,
         vmin=range_threshold[0],
         vmax=range_threshold[1],
     )
     im_noise = ax_noise.imshow(
-        noise[idx_scan],
+        noise[idx_scan].T,
         vmin=range_noise[0],
         vmax=range_noise[1],
     )
@@ -182,24 +186,27 @@ if __name__ == '__main__':
     fig.colorbar(im_noise, ax=ax_noise)
 
     def redraw_maps():
-        im_thresh.set_data(threshold[idx_scan])
-        im_noise.set_data(noise[idx_scan])
-
+        im_thresh.set_data(threshold[idx_scan].T)
+        im_noise.set_data(noise[idx_scan].T)
 
     # plot scurve
-    x_fit = np.linspace(np.min(config.injection_voltage), np.max(config.injection_voltage), 200)
-    y_fit = plot_scurves.fitfunc_sigmoid(x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
-    line_data, = ax_curve.plot(config.injection_voltage, efficiency[idx_scan+(...,)+idx_pixel], 'x')
+    x_fit = np.linspace(np.min(config.injection_voltage),
+                        np.max(config.injection_voltage), 200)
+    y_fit = plot_scurves.fitfunc_sigmoid(
+        x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
+    line_data, = ax_curve.plot(
+        config.injection_voltage, efficiency[idx_scan+(...,)+idx_pixel], 'x')
     line_fit, = ax_curve.plot(x_fit, y_fit, 'r')
     ax_curve.set_ylim(0, 1)
 
     def redraw_curve():
-        y_fit = plot_scurves.fitfunc_sigmoid(x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
+        y_fit = plot_scurves.fitfunc_sigmoid(
+            x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
         line_data.set_ydata(efficiency[idx_scan+(...,)+idx_pixel])
         line_fit.set_ydata(y_fit)
 
-
     # add change handler
+
     def slider_on_changed(*_):
         global idx_scan, sliders, scan_values
         idx_new = []
@@ -212,27 +219,37 @@ if __name__ == '__main__':
         redraw_hists()
         redraw_maps()
         redraw_curve()
-    
+
     for slider in sliders:
         slider.on_changed(slider_on_changed)
+
+    # pixel selection
+    lines_selected = [ax.plot([0], [0], 'rx')[0]
+                      for ax in (ax_thresh, ax_noise)]
 
     def mouse_event(event: MouseEvent):
         global idx_pixel
         if fix_idx or (event.inaxes != ax_thresh and event.inaxes != ax_noise):
             return
-        idx_pixel_new = tuple(map(lambda p: int(p + 0.5), (event.xdata, event.ydata)))
+        idx_pixel_new = tuple(
+            map(lambda p: int(p + 0.5), (event.xdata, event.ydata)))
         if idx_pixel == idx_pixel_new:
             return
         idx_pixel = idx_pixel_new
+        for line in lines_selected:
+            line.set_xdata(idx_pixel[:1])
+            line.set_ydata(idx_pixel[1:])
         redraw_curve()
 
-    
     def press_event(event: MouseEvent):
         global fix_idx
+        if event.inaxes != ax_thresh and event.inaxes != ax_noise:
+            return
         fix_idx = not fix_idx
-    
+
     fig.canvas.mpl_connect('motion_notify_event', mouse_event)
     fig.canvas.mpl_connect('button_press_event', press_event)
 
+    # plot
     plt.ion()
     plt.show(block=True)
