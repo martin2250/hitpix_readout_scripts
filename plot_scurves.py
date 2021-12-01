@@ -22,18 +22,38 @@ def fitfunc_sigmoid(x, threshold, noise):
     e = (x - threshold) / noise
     return 1 / (1 + np.exp(-e))
 
+# sigmoid with inverse noise -> speed up fit
+def fitfunc_sigmoid_inv(x, threshold, noise):
+    e = (x - threshold) * noise
+    return 1 / (1 + np.exp(-e))
+
 def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[float, float]:
+    # check inputs
     assert len(efficiency.shape) == 1
+    if injection_voltage.shape != efficiency.shape:
+        print(injection_voltage.shape, efficiency.shape)
+    assert injection_voltage.shape == efficiency.shape
+    # check for dead / noisy pixels
+    if sum(efficiency > 0.5) == 0: # dead
+        return np.inf, np.nan
+    if sum(efficiency < 0.5) == 0: # noisy
+        return -np.inf, np.nan
+    # get starting values
+    i_threshold = np.argmax(efficiency > 0.5)
+    threshold_0 = injection_voltage[i_threshold]
+    # fit
     (threshold, noise), _ = cast(
         tuple[np.ndarray, Any],
         scipy.optimize.curve_fit(
-            fitfunc_sigmoid,
+            fitfunc_sigmoid_inv,
             injection_voltage,
             efficiency,
-            bounds=[(0, 0.001), (2, 1)]
+            p0=(threshold_0, 100),
+            xtol=1e-3,
+            gtol=1e-4,
         ),
     )
-    return threshold, noise
+    return threshold, 1/noise
 
 def fit_sigmoids(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     shape_output = efficiency.shape[1:]
@@ -59,7 +79,7 @@ def plot_single_scurve(ax: Axes, injection_voltage: np.ndarray, efficiency: np.n
     ax.plot(injection_voltage, efficiency, 'x')
     ax.plot(x_fit, y_fit, 'r')
 
-def plot_single_map(ax: Axes, threshold: np.ndarray, noise: np.ndarray, map_type: Literal['threshold', 'noise']):
+def plot_single_map(ax: Axes, threshold: np.ndarray, noise: np.ndarray, pixel_edges: tuple[np.ndarray, np.ndarray], pixel_pos: tuple[np.ndarray, np.ndarray], map_type: Literal['threshold', 'noise']):
     # find broken pixels
     too_high = threshold > 1.5
     too_low = threshold < 0
@@ -79,6 +99,7 @@ def plot_single_map(ax: Axes, threshold: np.ndarray, noise: np.ndarray, map_type
     else:
         raise ValueError(f'unknown map_type {map_type}')
     # draw dead / noisy pixels
+    pixel_x, pixel_y = pixel_pos
     if too_high.any():
         ax.plot(pixel_x[too_high], pixel_y[too_high], 'rx', label='dead')
     if too_low.any():
@@ -110,7 +131,7 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--single_scurve', nargs=2,
+        '--pixel', nargs=2,
         metavar=('x', 'y'),
         type=int,
         help='plot scurve for single pixel',
@@ -150,18 +171,25 @@ if __name__ == '__main__':
     
     sensor_size = hits_noise.shape[1:]
     # pixel edges for pcolormesh
-    pixel_edges = tuple(np.arange(size + 1) - 0.5 for size in sensor_size)
+    pixel_edges = cast(tuple[np.ndarray, np.ndarray], tuple(np.arange(size + 1) - 0.5 for size in sensor_size))
     # pixel indices
-    pixel_x, pixel_y = np.meshgrid(*(np.array(np.arange(size)) for size in sensor_size))
+    pixel_pos = np.meshgrid(*(np.array(np.arange(size)) for size in sensor_size))
 
     # calculate pixel properties
     efficiency = hits_signal / config.injections_total
-    threshold, noise = fit_sigmoids(config.injection_voltage, efficiency)
+
+    threshold, noise = None, None
+    if args.maps or args.map_interactive:
+        t_start = time.perf_counter()
+        threshold, noise = fit_sigmoids(config.injection_voltage, efficiency)
+        t_end = time.perf_counter()
+        print(t_end - t_start)
+        exit()
 
     ################################################################################
 
-    if args.single_scurve:
-        x, y = args.single_scurve
+    if args.pixel:
+        x, y = args.pixel
         efficiency_pixel = hits_signal[:,x,y] / config.injections_total
         fig, ax = plt.subplots()
         plot_single_scurve(ax, config.injection_voltage, efficiency_pixel)
@@ -170,22 +198,24 @@ if __name__ == '__main__':
     ################################################################################
 
     if args.maps:
+        assert threshold is not None and noise is not None
         map_types = args.maps
         if 'all' in map_types:
             map_types = map_choices[1:]
         # plot
         fig, axes = plt.subplots(1, len(map_types), squeeze=False, sharey=True, figsize=(6*len(map_types), 5))
         for ax, map_type in zip(axes[0], map_types):
-            plot_single_map(ax, threshold, noise, cast(Any, map_type))
+            plot_single_map(ax, threshold, noise, pixel_edges, pixel_pos, cast(Any, map_type))
         plt.show()
 
     ################################################################################
     
     if args.map_interactive:
+        assert threshold is not None and noise is not None
         fig, axes = plt.subplots(1, 3)
         # plot static maps
-        plot_single_map(axes[0], threshold, noise, 'threshold')
-        plot_single_map(axes[1], threshold, noise, 'noise')
+        plot_single_map(axes[0], threshold, noise, pixel_edges, pixel_pos, 'threshold')
+        plot_single_map(axes[1], threshold, noise, pixel_edges, pixel_pos, 'noise')
         # plot dynamic data
         idx = (..., 0, 0)
         x_fit = np.linspace(np.min(config.injection_voltage), np.max(config.injection_voltage), 200)
