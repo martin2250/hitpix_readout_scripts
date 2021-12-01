@@ -185,7 +185,7 @@ if __name__ == '__main__':
     ############################################################################
 
     config = SCurveConfig(
-        injection_voltage=list(np.linspace(0.2, 1.6, 10)),
+        injection_voltage=list(np.linspace(0.5, 0.8, 200)),
         injections_per_round=50,
         injections_total=500,
         voltage_baseline=1.1,
@@ -196,10 +196,10 @@ if __name__ == '__main__':
     ############################################################################
     # open readout
 
-    fastreadout = FastReadout()
     ro = HitPix1Readout(
         '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
     ro.initialize()
+    fastreadout = FastReadout()
 
     hits_signal, hits_noise = measure_scurves(
         ro, fastreadout, config, tqdm.tqdm())
