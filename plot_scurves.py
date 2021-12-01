@@ -192,20 +192,26 @@ if __name__ == '__main__':
         y_fit = fitfunc_sigmoid(x_fit, threshold[idx[1:]], noise[idx[1:]])
         line_data, = axes[2].plot(config.injection_voltage, efficiency[idx], 'x')
         line_fit, = axes[2].plot(x_fit, y_fit, 'r')
+        fix_idx = False
 
         def mouse_event(event: MouseEvent):
-            global idx
+            global idx, fix_idx
             if event.inaxes != axes[0] and event.inaxes != axes[1]:
                 return
             idx_new = (..., *map(lambda p: int(p + 0.5), (event.xdata, event.ydata)))
-            if idx == idx_new:
+            if fix_idx or idx == idx_new:
                 return
             idx = idx_new
             line_data.set_ydata(efficiency[idx])
             y_fit = fitfunc_sigmoid(x_fit, threshold[idx[1:]], noise[idx[1:]])
             line_fit.set_ydata(y_fit)
         
+        def press_event(event: MouseEvent):
+            global fix_idx
+            fix_idx = not fix_idx
+        
         fig.canvas.mpl_connect('motion_notify_event', mouse_event)
+        fig.canvas.mpl_connect('button_press_event', press_event)
 
         plt.ion()
         plt.show(block=True)
