@@ -108,12 +108,17 @@ if __name__ == '__main__':
         threshold[idx], noise[idx] = result
 
     ################################################################################
-    
+
     fig = plt.gcf()
-    gs = fig.add_gridspec(2, 2, width_ratios=[0.6, 0.3])
-    ax_thresh = fig.add_subplot(gs[0, 0])
-    ax_noise = fig.add_subplot(gs[1, 0])
-    ax_curve = fig.add_subplot(gs[0, 1])
+    gs = fig.add_gridspec(2, 3)
+
+    # plot layout
+    ax_hthresh = fig.add_subplot(gs[0, 0])
+    ax_hnoise = fig.add_subplot(gs[1, 0])
+    ax_thresh = fig.add_subplot(gs[0, 1])
+    ax_noise = fig.add_subplot(gs[1, 1])
+    ax_curve = fig.add_subplot(gs[0, 2])
+    gs_sliders = gs[1, 2]
 
     # interactive state
     idx_pixel = (0, 0)
@@ -122,7 +127,7 @@ if __name__ == '__main__':
 
     # add sliders
     sliders = []
-    slider_bb = gs[1, 1].get_position(fig)
+    slider_bb = gs_sliders.get_position(fig)
     slider_height = (slider_bb.y1 - slider_bb.y0) / len(scan_names)
     for i_slider, name, values in zip(range(1000), scan_names, scan_values):
         ax_slider = fig.add_axes([
@@ -140,18 +145,37 @@ if __name__ == '__main__':
             valstep=values,
         ))
 
+    # data ranges
     threshold_clean = threshold[np.isfinite(threshold)]
     noise_clean = noise[np.isfinite(noise)]
+
+    range_threshold = np.min(threshold_clean), np.max(threshold_clean)
+    range_noise = np.min(noise_clean), np.max(noise_clean)
+
+    # plot histograms
+    _, bins_threshold, bars_threshold = ax_hthresh.hist(threshold[idx_scan].flat, bins=30, range=range_threshold)
+    _, bins_noise, bars_noise = ax_hnoise.hist(noise[idx_scan].flat, bins=30, range=range_noise)
+
+    def redraw_hists():
+        data_threshold, _ = np.histogram(threshold[idx_scan].flat, bins=bins_threshold)
+        data_noise, _ = np.histogram(noise[idx_scan].flat, bins=bins_noise)
+        for value, bar in zip(data_threshold, bars_threshold):
+            bar.set_height(value)
+        for value, bar in zip(data_noise, bars_noise):
+            bar.set_height(value)
+        ax_hthresh.set_ylim(0, np.max(data_threshold))
+        ax_hnoise.set_ylim(0, np.max(data_noise))
+
     # plot maps
     im_thresh = ax_thresh.imshow(
         threshold[idx_scan],
-        vmin=np.min(threshold_clean),
-        vmax=np.max(threshold_clean),
+        vmin=range_threshold[0],
+        vmax=range_threshold[1],
     )
     im_noise = ax_noise.imshow(
         noise[idx_scan],
-        vmin=np.min(noise_clean),
-        vmax=np.max(noise_clean),
+        vmin=range_noise[0],
+        vmax=range_noise[1],
     )
 
     fig.colorbar(im_thresh, ax=ax_thresh)
@@ -185,6 +209,7 @@ if __name__ == '__main__':
         if idx_new == idx_scan:
             return
         idx_scan = idx_new
+        redraw_hists()
         redraw_maps()
         redraw_curve()
     
