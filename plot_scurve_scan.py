@@ -140,16 +140,18 @@ if __name__ == '__main__':
             valstep=values,
         ))
 
+    threshold_clean = threshold[np.isfinite(threshold)]
+    noise_clean = noise[np.isfinite(noise)]
     # plot maps
     im_thresh = ax_thresh.imshow(
         threshold[idx_scan],
-        vmin=np.min(threshold),
-        vmax=np.max(threshold),
+        vmin=np.min(threshold_clean),
+        vmax=np.max(threshold_clean),
     )
     im_noise = ax_noise.imshow(
         noise[idx_scan],
-        vmin=np.min(noise),
-        vmax=np.max(noise),
+        vmin=np.min(noise_clean),
+        vmax=np.max(noise_clean),
     )
 
     fig.colorbar(im_thresh, ax=ax_thresh)
@@ -165,6 +167,7 @@ if __name__ == '__main__':
     y_fit = plot_scurves.fitfunc_sigmoid(x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
     line_data, = ax_curve.plot(config.injection_voltage, efficiency[idx_scan+(...,)+idx_pixel], 'x')
     line_fit, = ax_curve.plot(x_fit, y_fit, 'r')
+    ax_curve.set_ylim(0, 1)
 
     def redraw_curve():
         y_fit = plot_scurves.fitfunc_sigmoid(x_fit, threshold[idx_scan + idx_pixel], noise[idx_scan + idx_pixel])
