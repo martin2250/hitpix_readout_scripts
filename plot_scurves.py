@@ -22,7 +22,7 @@ def fitfunc_sigmoid(x, threshold, noise):
     e = (x - threshold) / noise
     return 1 / (1 + np.exp(-e))
 
-def fit_sigmoid(injection_voltage: Union[np.ndarray, list], efficiency: np.ndarray) -> tuple[float, float]:
+def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[float, float]:
     assert len(efficiency.shape) == 1
     (threshold, noise), _ = cast(
         tuple[np.ndarray, Any],
@@ -30,24 +30,27 @@ def fit_sigmoid(injection_voltage: Union[np.ndarray, list], efficiency: np.ndarr
             fitfunc_sigmoid,
             injection_voltage,
             efficiency,
-            bounds=[(0, 0), (2, 1)]
+            bounds=[(0, 0.001), (2, 1)]
         ),
     )
     return threshold, noise
 
-def fit_sigmoids(injection_voltage: Union[np.ndarray, list], efficiency: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def fit_sigmoids(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     shape_output = efficiency.shape[1:]
     threshold, noise = np.zeros(shape_output), np.zeros(shape_output)
     for idx in np.ndindex(*shape_output):
-            efficiency_pixel = efficiency[(..., *idx)]
+        efficiency_pixel = efficiency[(..., *idx)]
+        try:
             t, w = fit_sigmoid(injection_voltage, efficiency_pixel)
             threshold[idx] = t
             noise[idx] = w
+        except RuntimeError:
+            threshold[idx] = noise[idx] = np.nan
     return threshold, noise
 
 ################################################################################
 
-def plot_single_scurve(ax: Axes, injection_voltage: Union[np.ndarray, list], efficiency: np.ndarray):
+def plot_single_scurve(ax: Axes, injection_voltage: np.ndarray, efficiency: np.ndarray):
     popt = fit_sigmoid(injection_voltage, efficiency)
     
     x_fit = np.linspace(np.min(injection_voltage), np.max(injection_voltage), 200)

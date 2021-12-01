@@ -24,7 +24,7 @@ from statemachine import *
 @dataclass
 class SCurveConfig:
     dac_cfg: HitPix1DacConfig
-    injection_voltage: list[float]
+    injection_voltage: np.ndarray
     injections_per_round: int
     injections_total: int
     voltage_baseline: float
@@ -35,13 +35,20 @@ class SCurveConfig:
     def asdict(self) -> dict:
         d = dataclasses.asdict(self)
         d['dac_cfg'] = dataclasses.asdict(self.dac_cfg)
+        d['injection_voltage'] = self.injection_voltage.tolist()
         return d
 
     @staticmethod
     def fromdict(d: dict) -> 'SCurveConfig':
         dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
         del d['dac_cfg']
-        return SCurveConfig(dac_cfg=dac_cfg, **d)
+        injection_voltage = np.array(d['injection_voltage'])
+        del d['injection_voltage']
+        return SCurveConfig(
+            dac_cfg=dac_cfg,
+            injection_voltage=injection_voltage,
+            **d,
+        )
 
 ################################################################################
 
@@ -172,7 +179,53 @@ if __name__ == '__main__':
         help='h5 group name',
     )
 
+    def parse_injections(s: str) -> tuple[int, int]:
+        if '/' in s:
+            total, _, per_round = s.partition('/')
+        else:
+            total, per_round = s, 50
+        return int(total), int(per_round)
+
+    parser.add_argument(
+        '--injections', metavar='NUM[/ROUND]',
+        default='500/50', type=parse_injections,
+        help='total number of injections [/per round]',
+    )
+
+    def parse_voltages(s: str) -> tuple[float, float, int]:
+        start, stop, steps = s.split(':')
+        start, stop = map(float, (start, stop))
+        steps = int(steps)
+        assert 0 < start < stop < 1.8
+        assert steps > 0
+        return start, stop, steps
+
+    parser.add_argument(
+        '--voltages',
+        default='0.2:1.6:20', type=parse_voltages,
+        help='range of injection voltages start:stop:count',
+    )
+
+    parser.add_argument(
+        '--baseline',
+        default=1.1, type=float,
+        help='baseline voltage (V)',
+    )
+
+    parser.add_argument(
+        '--threshold',
+        default=1.2, type=float,
+        help='threshold voltage (V)',
+    )
+
     args = parser.parse_args()
+
+    ############################################################################
+
+    injection_voltage = np.linspace(*args.voltages)
+    injections_total, injections_per_round = args.injections
+    voltage_baseline = args.baseline
+    voltage_threshold = args.threshold
 
     ############################################################################
 
@@ -185,11 +238,11 @@ if __name__ == '__main__':
     ############################################################################
 
     config = SCurveConfig(
-        injection_voltage=list(np.linspace(0.5, 0.8, 200)),
-        injections_per_round=50,
-        injections_total=500,
-        voltage_baseline=1.1,
-        voltage_threshold=1.3,
+        injection_voltage=injection_voltage,
+        injections_per_round=injections_per_round,
+        injections_total=injections_total,
+        voltage_baseline=voltage_baseline,
+        voltage_threshold=voltage_threshold,
         dac_cfg=HitPix1DacConfig(),
     )
 
