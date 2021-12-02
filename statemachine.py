@@ -130,9 +130,9 @@ class Repeat(Instruction):
     repeat_count: int
     
     def to_binary(self) -> int:
-        assert (self.repeat_count - 1) in range(1 << 12)
+        assert (self.repeat_count - 2) in range(1 << 12)
         instr_mask = 0b00010000 << 24
-        instr_mask |= (self.repeat_count - 1)
+        instr_mask |= (self.repeat_count - 2)
         return instr_mask
 
 @dataclass
