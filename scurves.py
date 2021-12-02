@@ -58,7 +58,7 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     ############################################################################
     # configure readout & chip
 
-    ro.set_injection_ctrl(250, 250)
+    ro.set_injection_ctrl(500, 500)
 
     ro.set_treshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)

@@ -12,7 +12,7 @@ from readout import FastReadout, Response
 ro = HitPix1Readout('/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
 ro.initialize()
 
-ro.set_injection_ctrl(255, 255)
+ro.set_injection_ctrl(500, 500)
 
 ro.set_treshold_voltage(1.3)
 ro.set_baseline_voltage(1.1)
