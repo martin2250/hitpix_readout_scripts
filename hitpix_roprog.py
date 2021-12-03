@@ -265,6 +265,78 @@ def prog_full_readout(shift_clk_div: int) -> list[Instruction]:
     
     return prog
 
+def prog_read_frames(frame_cycles: int, pulse_cycles: int = 10, shift_clk_div: int = 1) -> tuple[list[Instruction], list[Instruction]]:#
+    '''returns programs (init and readout)'''
+    cfg_int = SetCfg(
+        shift_rx_invert = True,
+        shift_tx_invert = True,
+        shift_toggle = True,
+        shift_select_dac = False,
+        shift_word_len = 2 * 13,
+        shift_clk_div = shift_clk_div,
+        pins = 0,
+    )
+
+    # init
+    col_cfg_init = HitPix1ColumnConfig(0, 0, 0, 24)
+    prog_init = [
+        Reset(True, True),
+        *prog_shift_dense(col_cfg_init.generate(), False),
+        cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+        Sleep(pulse_cycles),
+        cfg_int,
+    ]
+    # readout
+    frame_delay = []
+    while frame_cycles > 0:
+        frame_cycles_i = min(frame_cycles, 1 << 24)
+        frame_delay.append(Sleep(frame_cycles_i))
+        frame_cycles -= frame_cycles_i
+
+    prog =[
+        # reset counters
+        cfg_int.set_pin(HitPix1Pins.ro_rescnt, True),
+        Sleep(pulse_cycles),
+        cfg_int,
+        # take data
+        cfg_int.set_pin(HitPix1Pins.ro_frame, True),
+        *frame_delay,
+        cfg_int,
+    ]
+    for row in range(25):
+        col_cfg = HitPix1ColumnConfig(0, 0, 0, row)
+        # add time to make readout more consistent
+        if row > 0:
+            prog.append(GetTime())
+        prog.extend([
+            Sleep(pulse_cycles),
+            Reset(True, True),
+            *prog_shift_dense(col_cfg.generate(), row > 0),
+            Sleep(pulse_cycles),
+            cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+            Sleep(pulse_cycles),
+            cfg_int,
+            Sleep(pulse_cycles),
+        ])
+        if row == 24:
+            break
+        prog.extend([
+            # load count into column register
+            cfg_int.set_pin(HitPix1Pins.ro_ldcnt, True),
+            Sleep(pulse_cycles),
+            cfg_int,
+            Sleep(pulse_cycles),
+            cfg_int.set_pin(HitPix1Pins.ro_penable, True),
+            Sleep(pulse_cycles),
+            ShiftOut(1, False),
+            Sleep(pulse_cycles),
+            cfg_int,
+            Sleep(pulse_cycles),
+        ])
+
+    return prog_init, prog
+
+
 def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13, bits_mask: int = 8) -> tuple[np.ndarray, np.ndarray]:
     '''decode column packets with timestamps'''
     # check that packet has right size for 32 bit ints
