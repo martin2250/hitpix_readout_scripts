@@ -31,6 +31,8 @@ class HitPix1Readout(readout.Readout):
         invert_pins |= 1 << 30 # ck 1&2 dac
         invert_pins |= 1 << 31 # ck 1&2 readout
         self.write_register(self.ADDR_SM_INVERT_PINS, invert_pins)
+
+        self.frequency_mhz = 200
     
     def set_treshold_voltage(self, voltage: float) -> None:
         self.voltage_card.set_voltage(HitPix1VoltageCards.threshold, voltage)

@@ -264,6 +264,8 @@ if __name__ == '__main__':
     ############################################################################
     # open readout
 
+    fastreadout = FastReadout()
+    time.sleep(0.05)
     ro = HitPix1Readout(
         '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
     ro.initialize()

@@ -137,10 +137,10 @@ class Readout:
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_WRITE]) + offset.to_bytes(2, 'little') + data)
 
-    def sm_start(self, runs: int = 1) -> None:
+    def sm_start(self, runs: int = 1, offset: int = 0) -> None:
         assert runs in range(256)
         self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_START, runs]))
+        self.send_packet(bytes([self.CMD_SM_START, *offset.to_bytes(2, 'little'), runs]))
 
     def sm_abort(self) -> None:
         self._expect_response()
@@ -176,7 +176,7 @@ class Readout:
                 print('init: state machine was still running, aborting')
                 self.sm_abort()
         except TimeoutError as err:
-            msg = '| failed to initialize, is the FPGA configured? |'
+            msg = '| failed to initialize, FPGA configured and FTDI 60MHz active? |'
             print('-' * len(msg))
             print(msg)
             print('-' * len(msg))
