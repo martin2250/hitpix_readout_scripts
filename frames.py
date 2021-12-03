@@ -104,7 +104,6 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     if progress is not None:
         progress.total = num_runs
 
-    hits_total = 0
     # test all voltages
     for _ in range(num_runs):
         # start measurement
@@ -113,7 +112,6 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
         ro.wait_sm_idle()
         if progress is not None:
             progress.update()
-            # progress.set_postfix(hits=f'{float(hits_total):0.2e}')
 
     responses[-1].event.wait(5)
 
@@ -141,7 +139,7 @@ def __get_config_dict() -> dict:
         'dac': HitPix1DacConfig(),
         'baseline': 1.1,
         'threshold': 1.2,
-        'frame_us': 100.0,
+        'frame_us': 5000.0,
     }
 
 def __get_help_epilog() -> str:
@@ -177,12 +175,6 @@ if __name__ == '__main__':
     parser.add_argument(
         'output_file',
         help='h5 output file',
-    )
-
-    parser.add_argument(
-        '--h5group',
-        default='frames',
-        help='h5 group name',
     )
 
     parser.add_argument(
@@ -258,7 +250,7 @@ if __name__ == '__main__':
             # scan over all possible combinations
             for idx in np.ndindex(scan_shape):
                 # check if this measurement is already present in file
-                group_name = 'scurve_' + '_'.join(str(i) for i in idx)
+                group_name = 'frames_' + '_'.join(str(i) for i in idx)
                 if group_name in file:
                     continue
                 # list of modifyable values
@@ -304,5 +296,5 @@ if __name__ == '__main__':
         frames = read_frames(ro, fastreadout, config, tqdm.tqdm())
 
         with h5py.File(path_output, 'w') as file:
-            group = file.create_group(args.h5group)
+            group = file.create_group('frames')
             save_frames(group, config, frames)

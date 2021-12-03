@@ -25,12 +25,6 @@ if __name__ == '__main__':
         help='h5 input file',
     )
 
-    parser.add_argument(
-        '--h5group',
-        default='auto',
-        help='h5 group name',
-    )
-
     args = parser.parse_args()
 
     ################################################################################
@@ -44,7 +38,7 @@ if __name__ == '__main__':
         scan_values = cast(list[list[float]], group_scan.attrs['scan_values'])
         scan_shape = tuple(len(values) for values in scan_values)
         # get info about injection scan
-        group_frame_first = file['scurve' + '_0' * len(scan_shape)]
+        group_frame_first = file['frames' + '_0' * len(scan_shape)]
         assert isinstance(group_frame_first, h5py.Group)
         config, hit_frames_first = frames.load_frames(group_frame_first)
         # create full data array
@@ -57,7 +51,7 @@ if __name__ == '__main__':
             # do not load zeroth scurve
             if not any(idx):
                 continue
-            group_name = 'scurve_' + '_'.join(str(i) for i in idx)
+            group_name = 'frames_' + '_'.join(str(i) for i in idx)
             group_frame = file[group_name]
             assert isinstance(group_frame, h5py.Group)
             _, hits_frames_group = frames.load_frames(group_frame)

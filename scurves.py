@@ -175,12 +175,6 @@ if __name__ == '__main__':
         help='h5 output file',
     )
 
-    parser.add_argument(
-        '--h5group',
-        default='scurve',
-        help='h5 group name',
-    )
-
     def parse_injections(s: str) -> tuple[int, int]:
         if '/' in s:
             total, _, per_round = s.partition('/')
@@ -344,5 +338,5 @@ if __name__ == '__main__':
         res = measure_scurves(ro, fastreadout, config, tqdm.tqdm())
 
         with h5py.File(path_output, 'w') as file:
-            group = file.create_group(args.h5group)
+            group = file.create_group('scurve')
             save_scurve(group, config, *res)

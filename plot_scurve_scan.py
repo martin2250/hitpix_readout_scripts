@@ -36,12 +36,6 @@ if __name__ == '__main__':
         help='h5 input file',
     )
 
-    parser.add_argument(
-        '--h5group',
-        default='auto',
-        help='h5 group name',
-    )
-
     args = parser.parse_args()
 
     ################################################################################
