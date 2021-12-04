@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from typing import Optional, cast
 
 import h5py
+import hitpix_roprog
 import numpy as np
 import tqdm
-import hitpix_roprog
 from hitpix1 import *
 from readout.fast_readout import FastReadout
 from readout.statemachine import *

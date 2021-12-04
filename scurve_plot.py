@@ -12,8 +12,8 @@ from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.widgets import Slider
 
-import plot_scurves
-import daq.scurve
+import scurve.analysis
+import scurve.daq
 import util.gridscan
 
 # TODO: add noise / dead pixel markers
@@ -36,10 +36,18 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
+    a_input_file = parser.add_argument(
         'input_file',
         help='h5 input file',
     )
+
+    try:
+        import argcomplete
+        from argcomplete.completers import FilesCompleter
+        setattr(a_input_file, 'completer', FilesCompleter('h5'))
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
 
     args = parser.parse_args()
 
@@ -57,7 +65,7 @@ if __name__ == '__main__':
         # get info about injection scan
         group_scurve = file['scurve' + '_0' * len(scan_shape)]
         assert isinstance(group_scurve, h5py.Group)
-        config, hits_signal_first, _ = daq.scurve.load_scurve(group_scurve)
+        config, hits_signal_first, _ = scurve.daq.load_scurve(group_scurve)
         # create full data array
         hits_signal = np.zeros(scan_shape + hits_signal_first.shape)
         # store first scurve
@@ -70,7 +78,7 @@ if __name__ == '__main__':
             group_name = 'scurve_' + '_'.join(str(i) for i in idx)
             group_scurve = file[group_name]
             assert isinstance(group_scurve, h5py.Group)
-            _, hits_signal_group, _ = daq.scurve.load_scurve(group_scurve)
+            _, hits_signal_group, _ = scurve.daq.load_scurve(group_scurve)
             hits_signal[idx] = hits_signal_group
 
     ################################################################################
@@ -93,7 +101,6 @@ if __name__ == '__main__':
     threshold, noise = np.zeros(shape_res), np.zeros(shape_res)
     efficiency = hits_signal / config.injections_total
 
-
     # each set of parameters is a separate job
     fit_jobs = (
         FitJob(config.injection_voltage, efficiency[idx], idx)
@@ -101,7 +108,7 @@ if __name__ == '__main__':
     )
 
     def fit_job(job: FitJob):
-        x = plot_scurves.fit_sigmoids(job.injection_voltage, job.efficiency)
+        x = scurve.analysis.fit_sigmoids(job.injection_voltage, job.efficiency)
         return x, job.idx
 
     results = ProcessPoolExecutor().map(fit_job, fit_jobs)
@@ -109,7 +116,7 @@ if __name__ == '__main__':
     # store in final results array
     for result, idx in tqdm.tqdm(results):
         threshold[idx], noise[idx] = result
-    
+
     # convert noise to mV
     noise *= 1e3
 
@@ -163,7 +170,7 @@ if __name__ == '__main__':
         threshold[idx_scan].flat, bins=30, range=range_threshold)
     _, bins_noise, bars_noise = ax_hnoise.hist(
         noise[idx_scan].flat, bins=30, range=range_noise)
-    
+
     ax_hthresh.set_xlabel('Threshold (V)')
     ax_hnoise.set_xlabel('Noise (mV)')
 
@@ -210,7 +217,7 @@ if __name__ == '__main__':
     ax_curve.set_ylabel('Efficiency')
 
     def redraw_curve():
-        y_fit = plot_scurves.fitfunc_sigmoid(
+        y_fit = scurve.analysis.fitfunc_sigmoid(
             x_fit,
             threshold[idx_scan + idx_pixel],
             1e-3*noise[idx_scan + idx_pixel]

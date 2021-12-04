@@ -18,12 +18,12 @@ def main(
     import numpy as np
     import tqdm
 
+    import hitpix.defaults
     import util.configuration
     import util.gridscan
-    from daq.scurve import SCurveConfig, measure_scurves, save_scurve
     from hitpix1 import HitPix1DacConfig, HitPix1Readout
-    import hitpix.defaults
     from readout.fast_readout import FastReadout
+    from scurve.daq import SCurveConfig, measure_scurves, save_scurve
 
     injection_voltage = util.gridscan.parse_range(injection_voltage_range)
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
@@ -168,6 +168,7 @@ if __name__ == '__main__':
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
+
         import hitpix.defaults
         choices_set = []
         for name, value in hitpix.defaults.dac_default_hitpix1.items():
