@@ -48,10 +48,12 @@ if __name__ == '__main__':
 
     with h5py.File(args.input_file) as file:
         # get information about parameter scan
-        assert 'scan' in file, 'file does not contain parameter scan'
-        group_scan = file['scan']
-        assert isinstance(group_scan, h5py.Group)
-        scan_parameters, scan_shape = util.gridscan.load_scan(group_scan)
+        if 'scan' in file:
+            group_scan = file['scan']
+            assert isinstance(group_scan, h5py.Group)
+            scan_parameters, scan_shape = util.gridscan.load_scan(group_scan)
+        else:
+            scan_parameters, scan_shape = [], ()
         # get info about injection scan
         group_scurve = file['scurve' + '_0' * len(scan_shape)]
         assert isinstance(group_scurve, h5py.Group)
