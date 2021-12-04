@@ -19,7 +19,7 @@ def load_scan(group_scan: h5py.Group) -> tuple[list[ParameterScan], tuple[int, .
     scan_names = group_scan.attrs['scan_names']
     assert isinstance(scan_names, np.ndarray)
     # check if old method was used to encode scan values
-    if 'scan_values' in group_scan:
+    if 'scan_values' in group_scan.attrs:
         # old method, all scans must have the same number of values
         scan_values = group_scan.attrs['scan_values']
         assert isinstance(scan_values, np.ndarray)

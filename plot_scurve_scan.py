@@ -13,7 +13,8 @@ from matplotlib.backend_bases import MouseEvent
 from matplotlib.widgets import Slider
 
 import plot_scurves
-import scurves
+import daq.scurve
+import util.gridscan
 
 # TODO: add noise / dead pixel markers
 # TODO: limit curve points at efficiency one
@@ -26,6 +27,7 @@ import scurves
 class FitJob:
     injection_voltage: np.ndarray
     efficiency: np.ndarray
+    idx: tuple
 
 
 ################################################################################
@@ -46,48 +48,27 @@ if __name__ == '__main__':
 
     with h5py.File(args.input_file) as file:
         # get information about parameter scan
+        assert 'scan' in file, 'file does not contain parameter scan'
         group_scan = file['scan']
         assert isinstance(group_scan, h5py.Group)
-        
-        
-        # scan_names = cast(list[str], group_scan.attrs['scan_names'])
-        # scan_values = cast(list[list[float]], group_scan.attrs['scan_values'])
-        
-        
-        scan_names = group_scan.attrs['scan_names']
-        assert isinstance(scan_names, np.ndarray)
-        scan_values: list[np.ndarray] = []
-        for name in scan_names:
-            dset_values = group_scan[name]
-            assert isinstance(dset_values, h5py.Dataset)
-            print(dset_values)
-            values_f = dset_values[:]
-            assert isinstance(values_f, np.ndarray)
-            scan_values.append(values_f)
-
-        print(scan_names)
-        print(scan_values)
-
-
-        scan_shape = tuple(len(values) for values in scan_values)
+        scan_parameters, scan_shape = util.gridscan.load_scan(group_scan)
         # get info about injection scan
         group_scurve = file['scurve' + '_0' * len(scan_shape)]
         assert isinstance(group_scurve, h5py.Group)
-        config, hits_signal_first, _ = scurves.load_scurve(group_scurve)
+        config, hits_signal_first, _ = daq.scurve.load_scurve(group_scurve)
         # create full data array
         hits_signal = np.zeros(scan_shape + hits_signal_first.shape)
         # store first scurve
         hits_signal[tuple(0 for _ in scan_shape) + (...,)] = hits_signal_first
         # store remaining scurves
-        def scan_indices(): return np.ndindex(cast(SupportsIndex, scan_shape))
-        for idx in scan_indices():
-            # do not load zeroth scurve
+        for idx in np.ndindex(*scan_shape):
+            # do not load zeroth scurve again
             if not any(idx):
                 continue
             group_name = 'scurve_' + '_'.join(str(i) for i in idx)
             group_scurve = file[group_name]
             assert isinstance(group_scurve, h5py.Group)
-            _, hits_signal_group, _ = scurves.load_scurve(group_scurve)
+            _, hits_signal_group, _ = daq.scurve.load_scurve(group_scurve)
             hits_signal[idx] = hits_signal_group
 
     ################################################################################
@@ -104,26 +85,29 @@ if __name__ == '__main__':
     # calculate pixel properties
 
     # shape of result
-    shape_res = list(hits_signal.shape)
-    del shape_res[-3]  # injection voltage axis
-    shape_res = tuple(shape_res)
+    shape_res = scan_shape + sensor_size
 
     # result arrays
     threshold, noise = np.zeros(shape_res), np.zeros(shape_res)
     efficiency = hits_signal / config.injections_total
 
+
     # each set of parameters is a separate job
-    fit_jobs = (FitJob(config.injection_voltage,
-                efficiency[idx]) for idx in scan_indices())
+    fit_jobs = (
+        FitJob(config.injection_voltage, efficiency[idx], idx)
+        for idx in np.ndindex(*scan_shape)
+    )
 
     def fit_job(job: FitJob):
-        return plot_scurves.fit_sigmoids(job.injection_voltage, job.efficiency)
+        x = plot_scurves.fit_sigmoids(job.injection_voltage, job.efficiency)
+        return x, job.idx
+
     results = ProcessPoolExecutor().map(fit_job, fit_jobs)
 
     # store in final results array
-    for idx, result in tqdm.tqdm(zip(scan_indices(), results)):
+    for result, idx in tqdm.tqdm(results):
         threshold[idx], noise[idx] = result
-
+    
     # convert noise to mV
     noise *= 1e3
 
@@ -148,8 +132,8 @@ if __name__ == '__main__':
     # add sliders
     sliders = []
     slider_bb = gs_sliders.get_position(fig)
-    slider_height = (slider_bb.y1 - slider_bb.y0) / len(scan_names)
-    for i_slider, name, values in zip(range(1000), scan_names, scan_values):
+    slider_height = (slider_bb.y1 - slider_bb.y0) / (len(scan_shape) + 1)
+    for i_slider, param in enumerate(scan_parameters):
         ax_slider = fig.add_axes([
             slider_bb.x0,
             slider_bb.y0 + slider_height * i_slider,
@@ -158,11 +142,11 @@ if __name__ == '__main__':
         ])
         sliders.append(Slider(
             ax=ax_slider,
-            label=name,
-            valmin=values[0],
-            valmax=values[-1],
-            valinit=values[0],
-            valstep=values,
+            label=param.name,
+            valmin=param.values[0],
+            valmax=param.values[-1],
+            valinit=param.values[0],
+            valstep=param.values,
         ))
 
     # data ranges
@@ -238,8 +222,8 @@ if __name__ == '__main__':
     def slider_on_changed(*_):
         global idx_scan, sliders, scan_values
         idx_new = []
-        for slider, values in zip(sliders, scan_values):
-            idx_new.append(np.argmax(values == slider.val))
+        for slider, param in zip(sliders, scan_parameters):
+            idx_new.append(np.argmax(param.values == slider.val))
         idx_new = tuple(idx_new)
         if idx_new == idx_scan:
             return

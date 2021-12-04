@@ -9,7 +9,7 @@ import argparse
 import scipy.optimize
 from typing import Literal, cast, Any, Union
 import matplotlib.pyplot as plt
-import scurves
+import daq.scurve
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent
 
@@ -168,7 +168,7 @@ if __name__ == '__main__':
         # load group
         group = file[h5group]
         assert isinstance(group, h5py.Group)
-        config, hits_signal, hits_noise = scurves.load_scurve(group)
+        config, hits_signal, hits_noise = daq.scurve.load_scurve(group)
     
     sensor_size = hits_noise.shape[1:]
     # pixel edges for pcolormesh
