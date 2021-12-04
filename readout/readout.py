@@ -2,7 +2,7 @@
 from os import read
 from typing import Iterable, Union, Optional
 import serial
-import statemachine
+from . import statemachine
 import time
 from cobs import cobs
 import threading
@@ -10,10 +10,7 @@ import queue
 from dataclasses import dataclass, field
 import pylibftdi
 
-@dataclass
-class Response:
-    data: Optional[bytes] = None
-    event: threading.Event = field(default_factory=lambda: threading.Event())
+from . import Response
 
 InstructionsLike = Union[list[int], list[statemachine.Instruction]]
 
@@ -213,76 +210,5 @@ class Readout:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
 
-class FastReadout:
-    def __init__(self) -> None:
-        self._response_queue: queue.Queue[Response] = queue.Queue()
-        # open FTDI
-        FT_FLOW_RTS_CTS = 0x0100
-        self.ftdi = pylibftdi.Device('519166548088')
-        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
-        time.sleep(10e-3)
-        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
-        self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
 
-        # start RX thread
-        threading.Thread(target=self.read, daemon=True, name='fastreadout').start()
-    
-    def read(self) -> None:
-        # clear buffer
-        while self.ftdi.read(16*4096):
-            pass
-        buffer = bytearray()
-        while True:
-            data_new = self.ftdi.read(16*4096)
-            if not isinstance(data_new, bytes) or not data_new:
-                time.sleep(0.001)
-                continue
-            buffer.extend(data_new)
-            # check if there are complete packets in the buffer
-            if not b'\x00' in buffer:
-                continue
-            index = buffer.rindex(b'\x00')
-            packets = buffer[:index].split(b'\x00')
-            del buffer[:index+1]
-            for packet in packets:
-                try:
-                    response = self._response_queue.get(False)
-                    response.data = cobs.decode(packet)
-                    response.event.set()
-                except queue.Empty:
-                    print('received unexpected response', packet)
-    
-    def expect_response(self) -> Response:
-        response = Response()
-        self._response_queue.put(response)
-        return response
 
-class DacCard:
-    def __init__(self, slot_id: int, num_dacs: int, voltage_supply: float, voltage_max: float, readout: Readout) -> None:
-        assert voltage_max <= voltage_supply
-        self.slot_id = slot_id
-        self.voltage_supply = voltage_supply
-        self.voltage_max = voltage_max
-        self.num_dacs = num_dacs
-        self.voltages = [0.0 for _ in range(num_dacs)]
-        self.readout = readout
-    
-    def update(self) -> None:
-        '''voltage needs about 3ms to stabilize (almost linear ramp up)'''
-        code_max = (1 << 14) - 1
-        data = bytearray()
-        for i, voltage in enumerate(reversed(self.voltages)):
-            # check voltage is safe
-            if not (0.0 <= voltage <= self.voltage_max):
-                raise ValueError(f'voltage #{i} value {voltage:0.2f} is out of range!')
-            # convert to 16 bit code
-            code = int(code_max * voltage / self.voltage_supply)
-            # add code to data array
-            data.extend((code << 2).to_bytes(2, 'big'))
-        # write to board
-        self.readout.write_function_card(self.slot_id, data)
-
-    def set_voltage(self, output_id: int, voltage: float, immediate: bool = True) -> None:
-        self.voltages[output_id] = voltage
-        if immediate:
-            self.update()

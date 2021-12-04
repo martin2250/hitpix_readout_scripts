@@ -1,6 +1,7 @@
 from enum import IntEnum
 from dataclasses import dataclass
-import readout
+from readout.readout import Readout
+from readout.dac_card import DacCard
 import bitarray, bitarray.util
 
 class HitPix1VoltageCards(IntEnum):
@@ -18,12 +19,12 @@ class HitPix1Pins(IntEnum):
     dac_inv_ck  = 30
     ro_inv_ck   = 31
 
-class HitPix1Readout(readout.Readout):
+class HitPix1Readout(Readout):
     def __init__(self, serial_name: str, timeout: float = 0.5) -> None:
         super().__init__(serial_name, timeout=timeout)
 
-        self.voltage_card = readout.DacCard(0, 8, 3.3, 1.8, self)
-        self.injection_card = readout.DacCard(2, 2, 3.3, 1.8, self)
+        self.voltage_card = DacCard(0, 8, 3.3, 1.8, self)
+        self.injection_card = DacCard(2, 2, 3.3, 1.8, self)
 
         invert_pins = 0
         invert_pins |= 1 << HitPix1Pins.ro_ldconfig
@@ -74,18 +75,23 @@ class HitPix1ColumnConfig:
 
 @dataclass
 class HitPix1DacConfig:
-    q0: int     = 0x01
-    qon: int    = 0x05
-    blres: int  = 63
-    vn1: int    = 30
-    vnfb: int   = 63
-    vnfoll: int = 4
-    vndell: int = 8
-    vn2: int    = 0
-    vnbias: int = 4
-    vpload: int = 3
-    vncomp: int = 5
-    vpfoll: int = 7
+    blres:  int
+    vn1:    int
+    vnfb:   int
+    vnfoll: int
+    vndell: int
+    vn2:    int
+    vnbias: int
+    vpload: int
+    vncomp: int
+    vpfoll: int
+    q0:     int = 0x01 # chip doesn't work without these
+    qon:    int = 0x05 # just leave them constant
+
+    @staticmethod
+    def default() -> 'HitPix1DacConfig':
+        import hitpix.defaults
+        return HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1)
 
     def generate(self) -> bitarray.bitarray:
         assert self.q0 in range(1 << 2)

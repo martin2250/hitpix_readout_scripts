@@ -1,5 +1,5 @@
 from typing import Union
-from statemachine import *
+from readout.statemachine import *
 import bitarray, bitarray.util
 import numpy as np
 import unittest
