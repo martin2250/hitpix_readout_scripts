@@ -2,7 +2,7 @@ import queue
 import threading
 import time
 
-import cobs
+from cobs import cobs
 import pylibftdi
 
 from . import Response
@@ -10,25 +10,32 @@ from . import Response
 
 class FastReadout:
     def __init__(self, serial_number: str) -> None:
+        self.serial_number = serial_number
         self._response_queue: queue.Queue[Response] = queue.Queue()
         # open FTDI
         FT_FLOW_RTS_CTS = 0x0100
-        self.ftdi = pylibftdi.Device(serial_number)
+        self.ftdi = pylibftdi.Device(self.serial_number)
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
         time.sleep(10e-3)
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
         self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
-
         # start RX thread
-        threading.Thread(target=self.read, daemon=True,
-                         name='fastreadout').start()
+        self.event_stop = threading.Event()
+        self.thread_read = threading.Thread(target=self.read, daemon=True, name='fastreadout')
+        self.thread_read.start()
+
+    def close(self) -> None:
+        self.event_stop.set()
+        self.thread_read.join()
+        self.ftdi.close()
 
     def read(self) -> None:
-        # clear buffer
+        # read remaining data from buffer
+        time.sleep(0.05)
         while self.ftdi.read(16*4096):
-            pass
+            time.sleep(0.05)
         buffer = bytearray()
-        while True:
+        while not self.event_stop.is_set():
             data_new = self.ftdi.read(16*4096)
             if not isinstance(data_new, bytes) or not data_new:
                 time.sleep(0.001)

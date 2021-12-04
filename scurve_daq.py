@@ -24,7 +24,7 @@ def main(
     from hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
     from scurve.daq import measure_scurves
-    from scurve.io import save_scurve, SCurveConfig
+    from scurve.io import SCurveConfig, save_scurve
 
     injection_voltage = util.gridscan.parse_range(injection_voltage_range)
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
@@ -70,53 +70,60 @@ def main(
 
     ############################################################################
 
-    if scan_parameters:
-        with h5py.File(path_output, 'a') as file:
-            # save scan parameters first
-            group_scan = file.require_group('scan')
-            util.gridscan.save_scan(group_scan, scan_parameters)
-            # create nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape))
-            prog_meas = tqdm.tqdm(leave=None)
-            # scan over all possible combinations
-            for idx in np.ndindex(*scan_shape):
-                # check if this measurement is already present in file
-                group_name = 'scurve_' + '_'.join(str(i) for i in idx)
-                if group_name in file:
-                    # skip
-                    prog_scan.update()
-                    continue
-                # apply scan and set
-                config_dict = copy.deepcopy(config_dict_template)
-                util.gridscan.apply_scan(config_dict, scan_parameters, idx)
-                util.gridscan.apply_set(config_dict, args_set)
-                # extract all values
-                config = config_from_dict(config_dict)
-                # perform measurement
-                prog_meas.reset()
-                for ignore in [True, True, False]:
-                    try:
-                        res = measure_scurves(
-                            ro, fastreadout, config, prog_meas)
-                        # store measurement
-                        group = file.create_group(group_name)
-                        save_scurve(group, config, *res)
-                    except Exception as e:
-                        prog_scan.write(f'Exception: {repr(e)}')
-                        if ignore:
-                            continue
-                        raise e
-                    break
-                prog_scan.update()
-    else:
-        util.gridscan.apply_set(config_dict_template, args_set)
-        config = config_from_dict(config_dict_template)
+    try:
+        if scan_parameters:
+            with h5py.File(path_output, 'a') as file:
+                # save scan parameters first
+                group_scan = file.require_group('scan')
+                util.gridscan.save_scan(group_scan, scan_parameters)
+                # create nested progress bars
+                prog_scan = tqdm.tqdm(total=np.product(scan_shape))
+                prog_meas = tqdm.tqdm(leave=None)
+                # scan over all possible combinations
+                for idx in np.ndindex(*scan_shape):
+                    # check if this measurement is already present in file
+                    group_name = 'scurve_' + '_'.join(str(i) for i in idx)
+                    if group_name in file:
+                        # skip
+                        prog_scan.update()
+                        continue
+                    # apply scan and set
+                    config_dict = copy.deepcopy(config_dict_template)
+                    util.gridscan.apply_scan(config_dict, scan_parameters, idx)
+                    util.gridscan.apply_set(config_dict, args_set)
+                    # extract all values
+                    config = config_from_dict(config_dict)
+                    # perform measurement
+                    prog_meas.reset()
+                    for _ in range(3):
+                        try:
+                            res = measure_scurves(
+                                ro, fastreadout, config, prog_meas)
+                            # store measurement
+                            group = file.create_group(group_name)
+                            save_scurve(group, config, *res)
+                            prog_scan.update()
+                            break
+                        except Exception as e:
+                            prog_scan.write(f'Exception: {repr(e)}')
+                            # restart fastreadout on failure
+                            fastreadout.close()
+                            fastreadout = FastReadout(
+                                board.fastreadout_serial_number)
+                    else:
+                        raise Exception('too many retries')
 
-        res = measure_scurves(ro, fastreadout, config, tqdm.tqdm())
+        else:
+            util.gridscan.apply_set(config_dict_template, args_set)
+            config = config_from_dict(config_dict_template)
 
-        with h5py.File(path_output, 'w') as file:
-            group = file.create_group('scurve')
-            save_scurve(group, config, *res)
+            res = measure_scurves(ro, fastreadout, config, tqdm.tqdm())
+
+            with h5py.File(path_output, 'w') as file:
+                group = file.create_group('scurve')
+                save_scurve(group, config, *res)
+    finally:
+        fastreadout.close()
 
 ################################################################################
 

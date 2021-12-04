@@ -1,12 +1,14 @@
 #!/usr/bin/python
 import argparse
 
+
 def __get_config_dict_ext() -> dict:
     return {
         'frame_us': 5000.0,
         'pause_us': 0.0,
         'hv': 5.0,
     }
+
 
 def main(
     output_file: str,
@@ -19,16 +21,18 @@ def main(
     import copy
     import time
     from pathlib import Path
+
     import h5py
     import numpy as np
     import tqdm
+
     import hitpix.defaults
     import util.configuration
     import util.gridscan
+    from frames.daq import read_frames
+    from frames.io import FrameConfig, save_frames
     from hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
-    from frames.io import FrameConfig, save_frames
-    from frames.daq import read_frames
 
     ############################################################################
 
@@ -79,6 +83,7 @@ def main(
     ############################################################################
 
     hv_current = -1.0
+
     def update_hv(voltage_hv: float):
         nonlocal hv_current
         if voltage_hv == hv_current:
@@ -93,57 +98,63 @@ def main(
 
     ############################################################################
 
-    if scan_parameters:
-        with h5py.File(path_output, 'w') as file:
-            # save scan parameters first
-            group_scan = file.require_group('scan')
-            util.gridscan.save_scan(group_scan, scan_parameters)
-            # nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape))
-            prog_meas = tqdm.tqdm(leave=None)
-            # scan over all possible combinations
-            for idx in np.ndindex(*scan_shape):
-                # check if this measurement is already present in file
-                group_name = 'frames_' + '_'.join(str(i) for i in idx)
-                if group_name in file:
-                    # skip
-                    prog_scan.update()
-                    continue
-                # apply scan and set
-                config_dict = copy.deepcopy(config_dict_template)
-                util.gridscan.apply_scan(config_dict, scan_parameters, idx)
-                util.gridscan.apply_set(config_dict, args_set)
-                # extract all values
-                config = config_from_dict(config_dict)
-                update_hv(config.voltage_hv)
-                # perform measurement
-                prog_meas.reset()
-                for ignore in [True, True, False]:
-                    try:
-                        frames, times = read_frames(ro, fastreadout, config, prog_meas)
-                        # store measurement
-                        group = file.create_group(group_name)
-                        save_frames(group, config, frames, times)
+    try:
+        if scan_parameters:
+            with h5py.File(path_output, 'w') as file:
+                # save scan parameters first
+                group_scan = file.require_group('scan')
+                util.gridscan.save_scan(group_scan, scan_parameters)
+                # nested progress bars
+                prog_scan = tqdm.tqdm(total=np.product(scan_shape))
+                prog_meas = tqdm.tqdm(leave=None)
+                # scan over all possible combinations
+                for idx in np.ndindex(*scan_shape):
+                    # check if this measurement is already present in file
+                    group_name = 'frames_' + '_'.join(str(i) for i in idx)
+                    if group_name in file:
+                        # skip
                         prog_scan.update()
-                    except Exception as e:
-                        prog_scan.write(f'Exception: {repr(e)}')
-                        if ignore:
-                            continue
-                        raise e
-                    break
-    
-    ############################################################################
-   
-    else:
-        util.gridscan.apply_set(config_dict_template, args_set)
-        config = config_from_dict(config_dict_template)
-        update_hv(config.voltage_hv)
+                        continue
+                    # apply scan and set
+                    config_dict = copy.deepcopy(config_dict_template)
+                    util.gridscan.apply_scan(config_dict, scan_parameters, idx)
+                    util.gridscan.apply_set(config_dict, args_set)
+                    # extract all values
+                    config = config_from_dict(config_dict)
+                    update_hv(config.voltage_hv)
+                    # perform measurement
+                    prog_meas.reset()
+                    for _ in range(3):
+                        try:
+                            frames, times = read_frames(
+                                ro, fastreadout, config, prog_meas)
+                            # store measurement
+                            group = file.create_group(group_name)
+                            save_frames(group, config, frames, times)
+                            prog_scan.update()
+                            break
+                        except Exception as e:
+                            prog_scan.write(f'Exception: {repr(e)}')
+                            # restart fastreadout on failure
+                            fastreadout.close()
+                            fastreadout = FastReadout(
+                                board.fastreadout_serial_number)
+                    else:
+                        raise Exception('too many retries')
 
-        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
+        else:
+            util.gridscan.apply_set(config_dict_template, args_set)
+            config = config_from_dict(config_dict_template)
+            update_hv(config.voltage_hv)
 
-        with h5py.File(path_output, 'w') as file:
-            group = file.create_group('frames')
-            save_frames(group, config, frames, times)
+            frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
+
+            with h5py.File(path_output, 'w') as file:
+                group = file.create_group('frames')
+                save_frames(group, config, frames, times)
+    finally:
+        fastreadout.close()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
