@@ -1,14 +1,12 @@
 #!/usr/bin/python
-from os import read
-from typing import Iterable, Union, Optional
+from typing import Any, Iterable, Union, Optional
 import serial
 from . import statemachine
 import time
 from cobs import cobs
 import threading
 import queue
-from dataclasses import dataclass, field
-import pylibftdi
+from dataclasses import dataclass
 
 from . import Response
 
@@ -148,7 +146,8 @@ class Readout:
         sync_counter = self.read_register(self.ADDR_TIMER)
         self._time_sync = (sync_counter, sync_time)
     
-    def convert_time(self, counter: int) -> float:
+    def convert_time(self, counter: Any) -> Any:
+        # use Any type to allow ints and ndarrays
         if self._time_sync is None:
             raise Exception('time not synchronized')
         counter_sync, time_sync = self._time_sync

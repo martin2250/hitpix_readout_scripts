@@ -1,10 +1,10 @@
 #!/usr/bin/python
 import argparse
-from typing import Literal
 
 def __get_config_dict_ext() -> dict:
     return {
         'frame_us': 5000.0,
+        'pause_us': 0.0,
         'hv': 5.0,
     }
 
@@ -14,7 +14,7 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     read_adders: bool,
-    hv_driver: Literal['manual'] = 'manual'
+    hv_driver: str = 'manual'
 ):
     import copy
     import time
@@ -50,6 +50,7 @@ def main(
             voltage_hv=config_dict['hv'],
             num_frames=num_frames,
             frame_length_us=config_dict['frame_us'],
+            pause_length_us=config_dict['pause_us'],
             read_adders=read_adders,
         )
 
@@ -86,6 +87,9 @@ def main(
         if hv_driver == 'manual':
             print(f'please set HV to {hv_current:0.2f}V')
             input('press enter to continue')
+        else:
+            print(f'unknown hv driver: {hv_driver}')
+            exit(1)
 
     ############################################################################
 
@@ -116,10 +120,10 @@ def main(
                 prog_meas.reset()
                 for ignore in [True, True, False]:
                     try:
-                        frames = read_frames(ro, fastreadout, config, prog_meas)
+                        frames, times = read_frames(ro, fastreadout, config, prog_meas)
                         # store measurement
                         group = file.create_group(group_name)
-                        save_frames(group, config, frames)
+                        save_frames(group, config, frames, times)
                         prog_scan.update()
                     except Exception as e:
                         prog_scan.write(f'Exception: {repr(e)}')
@@ -135,11 +139,11 @@ def main(
         config = config_from_dict(config_dict_template)
         update_hv(config.voltage_hv)
 
-        frames = read_frames(ro, fastreadout, config, tqdm.tqdm())
+        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
 
         with h5py.File(path_output, 'w') as file:
             group = file.create_group('frames')
-            save_frames(group, config, frames)
+            save_frames(group, config, frames, times)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

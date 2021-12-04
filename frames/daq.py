@@ -8,7 +8,7 @@ import hitpix_roprog
 import time
 from readout.statemachine import Finish
 
-def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None) -> np.ndarray:
+def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
     ############################################################################
     # configure readout & chip
 
@@ -25,6 +25,7 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
         frame_cycles=int(ro.frequency_mhz * config.frame_length_us),
         pulse_cycles=10,
         shift_clk_div=config.shift_clk_div,
+        pause_cycles=int(ro.frequency_mhz * config.pause_length_us),
     )
     prog_readout.append(Finish())
 
@@ -56,17 +57,21 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     # process data
 
     frames = []
+    timestamps = []
 
     for response in responses:
         # please pylance type checker
         assert response.data is not None
 
         # decode hits
-        _, hits = hitpix_roprog.decode_column_packets(response.data)
-        hits = (256 - hits) % 256  # counter count down
-        frames.append(hits.reshape(-1, 24, 24))
+        block_timestamps, block_frames = hitpix_roprog.decode_column_packets(response.data)
+        block_frames = (256 - block_frames) % 256  # counter count down
+        frames.append(block_frames.reshape(-1, 24, 24))
+        timestamps.append(block_timestamps)
 
     frames = np.hstack(frames).reshape(-1, 24, 24)
-    print(frames.shape)
-    print(np.sum(frames, axis=0))
-    return frames
+    timestamps = np.hstack(timestamps)
+
+    times = ro.convert_time(timestamps)
+
+    return frames, times

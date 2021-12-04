@@ -1,3 +1,4 @@
+from time import sleep
 from typing import Union
 from readout.statemachine import *
 import bitarray, bitarray.util
@@ -265,7 +266,15 @@ def prog_full_readout(shift_clk_div: int) -> list[Instruction]:
     
     return prog
 
-def prog_read_frames(frame_cycles: int, pulse_cycles: int = 10, shift_clk_div: int = 1) -> tuple[list[Instruction], list[Instruction]]:#
+def prog_sleep(sleep_cycles: int) -> list[Instruction]:
+    prog = []
+    while sleep_cycles > 0:
+        sleep_cycles_i = min(sleep_cycles, 1 << 24)
+        prog.append(Sleep(sleep_cycles_i))
+        sleep_cycles -= sleep_cycles_i
+    return prog
+
+def prog_read_frames(frame_cycles: int, pulse_cycles: int = 10, shift_clk_div: int = 1, pause_cycles: int = 0) -> tuple[list[Instruction], list[Instruction]]:#
     '''returns programs (init and readout)'''
     cfg_int = SetCfg(
         shift_rx_invert = True,
@@ -286,21 +295,18 @@ def prog_read_frames(frame_cycles: int, pulse_cycles: int = 10, shift_clk_div: i
         Sleep(pulse_cycles),
         cfg_int,
     ]
-    # readout
-    frame_delay = []
-    while frame_cycles > 0:
-        frame_cycles_i = min(frame_cycles, 1 << 24)
-        frame_delay.append(Sleep(frame_cycles_i))
-        frame_cycles -= frame_cycles_i
 
+    # readout
     prog =[
+        # wait (empty if pause_cycles = 0)
+        *prog_sleep(pause_cycles),
         # reset counters
         cfg_int.set_pin(HitPix1Pins.ro_rescnt, True),
         Sleep(pulse_cycles),
         cfg_int,
         # take data
         cfg_int.set_pin(HitPix1Pins.ro_frame, True),
-        *frame_delay,
+        *prog_sleep(frame_cycles),
         cfg_int,
     ]
     for row in range(25):
