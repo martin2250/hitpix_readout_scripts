@@ -4,9 +4,9 @@ from typing import Optional
 import hitpix_roprog
 import numpy as np
 import tqdm
-from hitpix1 import *
+from hitpix1 import HitPix1Readout
 from readout.fast_readout import FastReadout
-from readout.statemachine import *
+from readout.statemachine import Finish
 
 from .io import SCurveConfig
 

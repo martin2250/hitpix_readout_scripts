@@ -1,49 +1,54 @@
 #!/usr/bin/python
 import argparse
 
+def __get_config_dict_ext() -> dict:
+    return {
+        'frame_us': 5000.0,
+        'hv': 5.0,
+    }
 
 def main(
     output_file: str,
-    injection_voltage_range: str,
-    injections_total: int,
-    injections_per_round: int,
+    num_frames: int,
     args_scan: list[str],
     args_set: list[str],
+    read_adders: bool,
 ):
     import copy
     import time
     from pathlib import Path
-
     import h5py
     import numpy as np
     import tqdm
-
     import hitpix.defaults
     import util.configuration
     import util.gridscan
     from hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
-    from scurve.daq import measure_scurves
-    from scurve.io import save_scurve, SCurveConfig
+    from frames.io import FrameConfig, save_frames
+    from frames.daq import read_frames
 
-    injection_voltage = util.gridscan.parse_range(injection_voltage_range)
+    ############################################################################
+
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
         'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
+    config_dict_template.update(**__get_config_dict_ext())
 
     ############################################################################
 
-    def config_from_dict(scan_dict: dict) -> SCurveConfig:
-        return SCurveConfig(
-            voltage_baseline=scan_dict['baseline'],
-            voltage_threshold=scan_dict['threshold'],
-            dac_cfg=scan_dict['dac'],
-            injection_voltage=injection_voltage,
-            injections_per_round=injections_per_round,
-            injections_total=injections_total,
+    def config_from_dict(config_dict: dict) -> FrameConfig:
+        return FrameConfig(
+            dac_cfg=config_dict['dac'],
+            voltage_baseline=config_dict['baseline'],
+            voltage_threshold=config_dict['threshold'],
+            voltage_hv=config_dict['hv'],
+            num_frames=num_frames,
+            frame_length_us=config_dict['frame_us'],
+            read_adders=read_adders,
         )
 
     ############################################################################
@@ -71,17 +76,17 @@ def main(
     ############################################################################
 
     if scan_parameters:
-        with h5py.File(path_output, 'a') as file:
+        with h5py.File(path_output, 'w') as file:
             # save scan parameters first
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
-            # create nested progress bars
+            # nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape))
             prog_meas = tqdm.tqdm(leave=None)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
                 # check if this measurement is already present in file
-                group_name = 'scurve_' + '_'.join(str(i) for i in idx)
+                group_name = 'frames_' + '_'.join(str(i) for i in idx)
                 if group_name in file:
                     # skip
                     prog_scan.update()
@@ -96,30 +101,29 @@ def main(
                 prog_meas.reset()
                 for ignore in [True, True, False]:
                     try:
-                        res = measure_scurves(
-                            ro, fastreadout, config, prog_meas)
+                        frames = read_frames(ro, fastreadout, config, prog_meas)
                         # store measurement
                         group = file.create_group(group_name)
-                        save_scurve(group, config, *res)
+                        save_frames(group, config, frames)
+                        prog_scan.update()
                     except Exception as e:
                         prog_scan.write(f'Exception: {repr(e)}')
                         if ignore:
                             continue
                         raise e
                     break
-                prog_scan.update()
+    
+    ############################################################################
+   
     else:
         util.gridscan.apply_set(config_dict_template, args_set)
         config = config_from_dict(config_dict_template)
 
-        res = measure_scurves(ro, fastreadout, config, tqdm.tqdm())
+        frames = read_frames(ro, fastreadout, config, tqdm.tqdm())
 
         with h5py.File(path_output, 'w') as file:
-            group = file.create_group('scurve')
-            save_scurve(group, config, *res)
-
-################################################################################
-
+            group = file.create_group('frames')
+            save_frames(group, config, frames)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -129,23 +133,10 @@ if __name__ == '__main__':
         help='h5 output file',
     )
 
-    def parse_injections(s: str) -> tuple[int, int]:
-        if '/' in s:
-            total, _, per_round = s.partition('/')
-        else:
-            total, per_round = s, 50
-        return int(total), int(per_round)
-
     parser.add_argument(
-        '--injections', metavar='NUM[/ROUND]',
-        default='500/50', type=parse_injections,
-        help='total number of injections [/per round]',
-    )
-
-    parser.add_argument(
-        '--voltages',
-        default='0.2:1.6:40',
-        help='range of injection voltages start:stop:count[:log]',
+        '--frames',
+        type=int, default=5000,
+        help='total number of frames to read',
     )
 
     a_scan = parser.add_argument(
@@ -162,9 +153,9 @@ if __name__ == '__main__':
 
     # TODO: implement this
     parser.add_argument(
-        '--no-noise',
+        '--adders',
         action='store_true',
-        help='do not record noise hits, inject into whole row',
+        help='only read adders instead of full matrix',
     )
 
     try:
@@ -176,6 +167,8 @@ if __name__ == '__main__':
         for name, value in hitpix.defaults.dac_default_hitpix1.items():
             choices_set.append(f'dac.{name}={value}')
         for name, value in hitpix.defaults.voltages_default.items():
+            choices_set.append(f'{name}={value}')
+        for name, value in __get_config_dict_ext().items():
             choices_set.append(f'{name}={value}')
         choices_scan = [value + ':' for value in choices_set]
         setattr(a_set, 'completer', ChoicesCompleter(choices_set))
@@ -189,9 +182,8 @@ if __name__ == '__main__':
 
     main(
         output_file=args.output_file,
-        injection_voltage_range=args.voltages,
-        injections_total=args.injections[0],
-        injections_per_round=args.injections[1],
+        num_frames=args.frames,
         args_scan=args.scan or [],
         args_set=args.set or [],
+        read_adders=args.adders,
     )
