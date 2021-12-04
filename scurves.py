@@ -6,18 +6,18 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, SupportsIndex, cast, Union, Any
-import scipy.optimize
+from typing import Any, Optional, SupportsIndex, cast
 
 import h5py
 import numpy as np
 import tqdm
-import copy
 
 import hitpix_roprog
 from hitpix1 import *
 from readout import FastReadout
 from statemachine import *
+
+# TODO: injections come from negative edge of voltage! make low period shorter!
 
 ################################################################################
 
@@ -58,7 +58,8 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     ############################################################################
     # configure readout & chip
 
-    ro.set_injection_ctrl(500, 500)
+    # 250 ns negative pulse with 4µs pause
+    ro.set_injection_ctrl(50, 800)
 
     ro.set_treshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
@@ -197,7 +198,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--voltages',
-        default='0.2:1.6:20', type=parse_range,
+        default='0.2:1.6:40', type=parse_range,
         help='range of injection voltages start:stop:count',
     )
 
@@ -213,6 +214,14 @@ if __name__ == '__main__':
         help='threshold voltage (V)',
     )
 
+    # TODO: implement this
+    parser.add_argument(
+        '--set', metavar=('name', 'expression'),
+        action='append',
+        nargs=2,
+        help='set parameter',
+    )
+
     parser.add_argument(
         '--scan', metavar=('name', 'start:stop:count'),
         action='append',
@@ -220,6 +229,7 @@ if __name__ == '__main__':
         help='scan parameter',
     )
 
+    # TODO: implement this
     parser.add_argument(
         '--no-noise',
         action='store_true',
@@ -242,7 +252,7 @@ if __name__ == '__main__':
         for name, value_range in args.scan:
             assert name not in scan_names
             scan_names.append(name)
-            start, stop, steps=  parse_range(value_range)
+            start, stop, steps = parse_range(value_range)
             scan_values.append(np.linspace(start, stop, steps))
             scan_shape = scan_shape + (steps,)
     scan_shape = cast(SupportsIndex, scan_shape)
@@ -251,8 +261,11 @@ if __name__ == '__main__':
 
     path_output = Path(args.output_file)
     if path_output.exists():
-        res = input(f'file {path_output} exists, continue measurement? (y/N): ')
-        if res.lower() != 'y':
+        res = input(
+            f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+        if res.lower() == 'd':
+            path_output.unlink()
+        elif res.lower() != 'c':
             exit()
 
     ############################################################################
@@ -261,25 +274,40 @@ if __name__ == '__main__':
     fastreadout = FastReadout()
     time.sleep(0.05)
     ro = HitPix1Readout(
-        '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
+        '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A904CYCK-if00-port0')
+    # '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
     ro.initialize()
-    fastreadout = FastReadout()
 
     ############################################################################
 
     config_common = {
-        'injection_voltage':injection_voltage,
-        'injections_per_round':injections_per_round,
-        'injections_total':injections_total,
+        'injection_voltage': injection_voltage,
+        'injections_per_round': injections_per_round,
+        'injections_total': injections_total,
     }
 
     ############################################################################
-    
+
     if args.scan:
-        with h5py.File(path_output, 'w') as file:
-            group_scan = file.create_group('scan')
-            group_scan.attrs['scan_names'] = scan_names
-            group_scan.attrs['scan_values'] = [values.tolist() for values in scan_values]
+        with h5py.File(path_output, 'a') as file:
+            if 'scan' in file:
+                group_scan = file['scan']
+                assert isinstance(group_scan, h5py.Group)
+                scan_names_f = group_scan.attrs['scan_names']
+                assert isinstance(scan_names_f, np.ndarray)
+                scan_values_f = group_scan.attrs['scan_values']
+                assert np.array_equal(scan_names, scan_names_f)
+                for name, values in zip(scan_names, scan_values):
+                    dset_values = group_scan[name]
+                    assert isinstance(dset_values, h5py.Dataset)
+                    values_f = dset_values[:]
+                    assert isinstance(values_f, np.ndarray)
+                    assert np.array_equal(values, values_f)
+            else:
+                group_scan = file.create_group('scan')
+                group_scan.attrs['scan_names'] = scan_names
+                for name, values in zip(scan_names, scan_values):
+                    group_scan.create_dataset(name, data=values)
             # nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape))
             prog_meas = tqdm.tqdm(leave=None)
@@ -288,7 +316,7 @@ if __name__ == '__main__':
                 # check if this measurement is already present in file
                 group_name = 'scurve_' + '_'.join(str(i) for i in idx)
                 if group_name in file:
-                    continue
+                    prog_scan.update()
                 # list of modifyable values
                 scan_globals = {
                     'dac': HitPix1DacConfig(),
@@ -302,6 +330,9 @@ if __name__ == '__main__':
                     if name.startswith('dac.'):
                         value = int(value)
                     exec(f'{name} = {value}', scan_globals)
+                # loop over all sets and modify config
+                for name, expression in (args.set or ()):
+                    exec(f'{name} = {expression}', scan_globals)
                 # extract all values
                 config = SCurveConfig(
                     voltage_baseline=scan_globals['baseline'],
@@ -313,20 +344,21 @@ if __name__ == '__main__':
                 prog_meas.reset()
                 for ignore in [True, True, False]:
                     try:
-                        res = measure_scurves(ro, fastreadout, config, prog_meas)
+                        res = measure_scurves(
+                            ro, fastreadout, config, prog_meas)
                         # store measurement
                         group = file.create_group(group_name)
                         save_scurve(group, config, *res)
-                        prog_scan.update()
                     except Exception as e:
                         prog_scan.write(f'Exception: {repr(e)}')
                         if ignore:
                             continue
                         raise e
                     break
-    
+                prog_scan.update()
+
     ############################################################################
-   
+
     else:
         config = SCurveConfig(
             voltage_baseline=voltage_baseline,

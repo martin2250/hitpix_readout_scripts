@@ -15,6 +15,9 @@ from matplotlib.widgets import Slider
 import plot_scurves
 import scurves
 
+# TODO: add noise / dead pixel markers
+# TODO: limit curve points at efficiency one
+
 ################################################################################
 # multithreaded fitting
 
@@ -45,8 +48,27 @@ if __name__ == '__main__':
         # get information about parameter scan
         group_scan = file['scan']
         assert isinstance(group_scan, h5py.Group)
-        scan_names = cast(list[str], group_scan.attrs['scan_names'])
-        scan_values = cast(list[list[float]], group_scan.attrs['scan_values'])
+        
+        
+        # scan_names = cast(list[str], group_scan.attrs['scan_names'])
+        # scan_values = cast(list[list[float]], group_scan.attrs['scan_values'])
+        
+        
+        scan_names = group_scan.attrs['scan_names']
+        assert isinstance(scan_names, np.ndarray)
+        scan_values: list[np.ndarray] = []
+        for name in scan_names:
+            dset_values = group_scan[name]
+            assert isinstance(dset_values, h5py.Dataset)
+            print(dset_values)
+            values_f = dset_values[:]
+            assert isinstance(values_f, np.ndarray)
+            scan_values.append(values_f)
+
+        print(scan_names)
+        print(scan_values)
+
+
         scan_shape = tuple(len(values) for values in scan_values)
         # get info about injection scan
         group_scurve = file['scurve' + '_0' * len(scan_shape)]
