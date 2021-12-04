@@ -2,7 +2,7 @@
 import argparse
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
-from typing import SupportsIndex, cast
+from typing import cast
 
 import h5py
 import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ from matplotlib.backend_bases import MouseEvent
 from matplotlib.widgets import Slider
 
 import scurve.analysis
-import scurve.daq
+import scurve.io
 import util.gridscan
 
 # TODO: add noise / dead pixel markers
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         # get info about injection scan
         group_scurve = file['scurve' + '_0' * len(scan_shape)]
         assert isinstance(group_scurve, h5py.Group)
-        config, hits_signal_first, _ = scurve.daq.load_scurve(group_scurve)
+        config, hits_signal_first, _ = scurve.io.load_scurve(group_scurve)
         # create full data array
         hits_signal = np.zeros(scan_shape + hits_signal_first.shape)
         # store first scurve
@@ -78,7 +78,7 @@ if __name__ == '__main__':
             group_name = 'scurve_' + '_'.join(str(i) for i in idx)
             group_scurve = file[group_name]
             assert isinstance(group_scurve, h5py.Group)
-            _, hits_signal_group, _ = scurve.daq.load_scurve(group_scurve)
+            _, hits_signal_group, _ = scurve.io.load_scurve(group_scurve)
             hits_signal[idx] = hits_signal_group
 
     ################################################################################

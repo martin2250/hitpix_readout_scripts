@@ -23,7 +23,8 @@ def main(
     import util.gridscan
     from hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
-    from scurve.daq import SCurveConfig, measure_scurves, save_scurve
+    from scurve.daq import measure_scurves
+    from scurve.io import save_scurve, SCurveConfig
 
     injection_voltage = util.gridscan.parse_range(injection_voltage_range)
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
