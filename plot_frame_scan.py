@@ -34,11 +34,28 @@ if __name__ == '__main__':
         # get information about parameter scan
         group_scan = file['scan']
         assert isinstance(group_scan, h5py.Group)
-        scan_names = cast(list[str], group_scan.attrs['scan_names'])
-        scan_values = cast(list[list[float]], group_scan.attrs['scan_values'])
+
+        scan_names = group_scan.attrs['scan_names']
+        assert isinstance(scan_names, np.ndarray)
+        scan_values: list[np.ndarray] = []
+        for name in scan_names:
+            dset_values = group_scan[name]
+            assert isinstance(dset_values, h5py.Dataset)
+            print(dset_values)
+            values_f = dset_values[:]
+            assert isinstance(values_f, np.ndarray)
+            scan_values.append(values_f)
+
+        print(scan_names)
+        print(scan_values)
+
+
         scan_shape = tuple(len(values) for values in scan_values)
         # get info about injection scan
-        group_frame_first = file['frames' + '_0' * len(scan_shape)]
+        prefix = 'frames'
+        if not (prefix + '_0' * len(scan_shape)) in file:
+            prefix = 'scurve'
+        group_frame_first = file[prefix + '_0' * len(scan_shape)]
         assert isinstance(group_frame_first, h5py.Group)
         config, hit_frames_first = frames.load_frames(group_frame_first)
         # create full data array
@@ -51,7 +68,7 @@ if __name__ == '__main__':
             # do not load zeroth scurve
             if not any(idx):
                 continue
-            group_name = 'frames_' + '_'.join(str(i) for i in idx)
+            group_name = prefix + '_' + '_'.join(str(i) for i in idx)
             group_frame = file[group_name]
             assert isinstance(group_frame, h5py.Group)
             _, hits_frames_group = frames.load_frames(group_frame)
@@ -106,7 +123,7 @@ if __name__ == '__main__':
         ))
 
     # data ranges
-    range_hits = np.min(hits_frames), np.percentile(hits_frames, 95)
+    range_hits = np.min(hits_frames), np.percentile(hits_frames, 80)
     # range_hits = np.min(hits_frames), np.max(hits_frames)
 
     # plot histograms
@@ -138,6 +155,7 @@ if __name__ == '__main__':
     line_data, = ax_curve.plot([], [])
     ax_curve.set_xlabel(scan_names[id_slider])
     ax_curve.set_ylabel('Total Hits')
+    ax_curve.set_yscale('log')
 
     def redraw_curve():
         sum_axes = list(range(len(hits_frames.shape)))

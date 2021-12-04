@@ -241,9 +241,24 @@ if __name__ == '__main__':
 
     if args.scan:
         with h5py.File(path_output, 'w') as file:
-            group_scan = file.create_group('scan')
-            group_scan.attrs['scan_names'] = scan_names
-            group_scan.attrs['scan_values'] = [values.tolist() for values in scan_values]
+            if 'scan' in file:
+                group_scan = file['scan']
+                assert isinstance(group_scan, h5py.Group)
+                scan_names_f = group_scan.attrs['scan_names']
+                assert isinstance(scan_names_f, np.ndarray)
+                scan_values_f = group_scan.attrs['scan_values']
+                assert np.array_equal(scan_names, scan_names_f)
+                for name, values in zip(scan_names, scan_values):
+                    dset_values = group_scan[name]
+                    assert isinstance(dset_values, h5py.Dataset)
+                    values_f = dset_values[:]
+                    assert isinstance(values_f, np.ndarray)
+                    assert np.array_equal(values, values_f)
+            else:
+                group_scan = file.create_group('scan')
+                group_scan.attrs['scan_names'] = scan_names
+                for name, values in zip(scan_names, scan_values):
+                    group_scan.create_dataset(name, data=values)
             # nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape))
             prog_meas = tqdm.tqdm(leave=None)
