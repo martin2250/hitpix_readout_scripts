@@ -1,15 +1,12 @@
 #!/usr/bin/python
 import argparse
-from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
-from typing import SupportsIndex, cast
+from typing import cast
 
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
 from matplotlib.axes import Axes
-from matplotlib.backend_bases import MouseEvent
 from matplotlib.widgets import Slider
 import util.gridscan
 import frames.io
@@ -69,16 +66,6 @@ if __name__ == '__main__':
             assert isinstance(group_frame, h5py.Group)
             _, hits_frames_group, _ = frames.io.load_frames(group_frame)
             hits_frames[idx] = hits_frames_group
-
-    ################################################################################
-
-    sensor_size = hit_frames_first.shape[1:]
-    # pixel edges for pcolormesh
-    pixel_edges = pixel_edges = cast(tuple[np.ndarray, np.ndarray], tuple(
-        np.arange(size + 1) - 0.5 for size in sensor_size))
-    # pixel indices
-    pixel_pos = np.meshgrid(*(np.array(np.arange(size))
-                            for size in sensor_size))
 
     ################################################################################
     # calculate pixel properties
