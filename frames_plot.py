@@ -11,8 +11,8 @@ import tqdm
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.widgets import Slider
-
-import frames
+import util.gridscan
+import frames.io
 
 ################################################################################
 
@@ -20,10 +20,18 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
+    a_input_file = parser.add_argument(
         'input_file',
         help='h5 input file',
     )
+
+    try:
+        import argcomplete
+        from argcomplete.completers import FilesCompleter
+        setattr(a_input_file, 'completer', FilesCompleter('h5'))
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
 
     args = parser.parse_args()
 
@@ -32,46 +40,34 @@ if __name__ == '__main__':
 
     with h5py.File(args.input_file) as file:
         # get information about parameter scan
-        group_scan = file['scan']
-        assert isinstance(group_scan, h5py.Group)
+        if 'scan' in file:
+            group_scan = file['scan']
+            assert isinstance(group_scan, h5py.Group)
+            scan_parameters, scan_shape = util.gridscan.load_scan(group_scan)
+        else:
+            scan_parameters, scan_shape = [], ()
 
-        scan_names = group_scan.attrs['scan_names']
-        assert isinstance(scan_names, np.ndarray)
-        scan_values: list[np.ndarray] = []
-        for name in scan_names:
-            dset_values = group_scan[name]
-            assert isinstance(dset_values, h5py.Dataset)
-            print(dset_values)
-            values_f = dset_values[:]
-            assert isinstance(values_f, np.ndarray)
-            scan_values.append(values_f)
-
-        print(scan_names)
-        print(scan_values)
-
-
-        scan_shape = tuple(len(values) for values in scan_values)
-        # get info about injection scan
+        # load first dataset to get data shape
+        # old data format used 'scurve' prefix
         prefix = 'frames'
         if not (prefix + '_0' * len(scan_shape)) in file:
             prefix = 'scurve'
-        group_frame_first = file[prefix + '_0' * len(scan_shape)]
-        assert isinstance(group_frame_first, h5py.Group)
-        config, hit_frames_first = frames.load_frames(group_frame_first)
+        group_frames = file[prefix + '_0' * len(scan_shape)]
+        assert isinstance(group_frames, h5py.Group)
+        config, hit_frames_first = frames.io.load_frames(group_frames)
         # create full data array
         hits_frames = np.zeros(scan_shape + hit_frames_first.shape)
         # store first scurve
         hits_frames[tuple(0 for _ in scan_shape) + (...,)] = hit_frames_first
         # store remaining scurves
-        def scan_indices(): return np.ndindex(cast(SupportsIndex, scan_shape))
-        for idx in scan_indices():
-            # do not load zeroth scurve
+        for idx in np.ndindex(*scan_shape):
+            # do not load zeroth frame again
             if not any(idx):
                 continue
             group_name = prefix + '_' + '_'.join(str(i) for i in idx)
             group_frame = file[group_name]
             assert isinstance(group_frame, h5py.Group)
-            _, hits_frames_group = frames.load_frames(group_frame)
+            _, hits_frames_group = frames.io.load_frames(group_frame)
             hits_frames[idx] = hits_frames_group
 
     ################################################################################
@@ -105,8 +101,8 @@ if __name__ == '__main__':
     # add sliders
     sliders = []
     slider_bb = gs_sliders.get_position(fig)
-    slider_height = (slider_bb.y1 - slider_bb.y0) / len(scan_names)
-    for i_slider, name, values in zip(range(1000), scan_names, scan_values):
+    slider_height = (slider_bb.y1 - slider_bb.y0) / (len(scan_shape) + 1)
+    for i_slider, param in enumerate(scan_parameters):
         ax_slider = fig.add_axes([
             slider_bb.x0,
             slider_bb.y0 + slider_height * i_slider,
@@ -115,11 +111,11 @@ if __name__ == '__main__':
         ])
         sliders.append(Slider(
             ax=ax_slider,
-            label=name,
-            valmin=values[0],
-            valmax=values[-1],
-            valinit=values[0],
-            valstep=values,
+            label=param.name,
+            valmin=param.values[0],
+            valmax=param.values[-1],
+            valinit=param.values[0],
+            valstep=param.values,
         ))
 
     # data ranges
@@ -153,30 +149,30 @@ if __name__ == '__main__':
 
     # plot scurve
     line_data, = ax_curve.plot([], [])
-    ax_curve.set_xlabel(scan_names[id_slider])
     ax_curve.set_ylabel('Total Hits')
     ax_curve.set_yscale('log')
 
     def redraw_curve():
         sum_axes = list(range(len(hits_frames.shape)))
         del sum_axes[id_slider]
-        data = np.sum(hits_frames, axis=tuple(sum_axes))
-        line_data.set_xdata(scan_values[id_slider])
-        line_data.set_ydata(data)
-        ax_curve.set_xlim(np.min(scan_values[id_slider]), np.max(scan_values[id_slider]))
-        ax_curve.set_ylim(np.min(data), np.max(data))
-        ax_curve.set_xlabel(scan_names[id_slider])
+        data_x = scan_parameters[id_slider].values
+        data_y = np.sum(hits_frames, axis=tuple(sum_axes))
+        line_data.set_xdata(data_x)
+        line_data.set_ydata(data_y)
+        ax_curve.set_xlim(np.min(data_x), np.max(data_x))
+        ax_curve.set_ylim(np.min(data_y), np.max(data_y))
+        ax_curve.set_xlabel(scan_parameters[id_slider].name)
     redraw_curve()
 
     # add change handler
     def slider_on_changed(changed_slider):
-        global idx_scan, sliders, scan_values, id_slider
+        global idx_scan, sliders, scan_parameters, id_slider
         for i_slider, slider in enumerate(sliders):
             if slider == changed_slider:
                 id_slider = i_slider
         idx_new = []
-        for slider, values in zip(sliders, scan_values):
-            idx_new.append(np.argmax(values == slider.val))
+        for slider, param in zip(sliders, scan_parameters):
+            idx_new.append(np.argmax(param.values == slider.val))
         idx_new = tuple(idx_new)
         if idx_new == idx_scan:
             return

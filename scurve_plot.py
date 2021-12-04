@@ -62,7 +62,7 @@ if __name__ == '__main__':
             scan_parameters, scan_shape = util.gridscan.load_scan(group_scan)
         else:
             scan_parameters, scan_shape = [], ()
-        # get info about injection scan
+        # load first dataset to get data shape
         group_scurve = file['scurve' + '_0' * len(scan_shape)]
         assert isinstance(group_scurve, h5py.Group)
         config, hits_signal_first, _ = scurve.io.load_scurve(group_scurve)

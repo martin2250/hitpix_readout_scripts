@@ -31,6 +31,9 @@ class FrameConfig:
     def fromdict(d: dict) -> 'FrameConfig':
         dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
         del d['dac_cfg']
+        # TODO: remove this, HV should always be set
+        if not 'voltage_hv' in d:
+            d['voltage_hv'] = -1
         return FrameConfig(
             dac_cfg=dac_cfg,
             **d,
