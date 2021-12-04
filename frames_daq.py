@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import argparse
+from typing import Literal
 
 def __get_config_dict_ext() -> dict:
     return {
@@ -13,6 +14,7 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     read_adders: bool,
+    hv_driver: Literal['manual'] = 'manual'
 ):
     import copy
     import time
@@ -75,6 +77,18 @@ def main(
 
     ############################################################################
 
+    hv_current = -1.0
+    def update_hv(voltage_hv: float):
+        nonlocal hv_current
+        if voltage_hv == hv_current:
+            return
+        hv_current = voltage_hv
+        if hv_driver == 'manual':
+            print(f'please set HV to {hv_current:0.2f}V')
+            input('press enter to continue')
+
+    ############################################################################
+
     if scan_parameters:
         with h5py.File(path_output, 'w') as file:
             # save scan parameters first
@@ -97,6 +111,7 @@ def main(
                 util.gridscan.apply_set(config_dict, args_set)
                 # extract all values
                 config = config_from_dict(config_dict)
+                update_hv(config.voltage_hv)
                 # perform measurement
                 prog_meas.reset()
                 for ignore in [True, True, False]:
@@ -118,6 +133,7 @@ def main(
     else:
         util.gridscan.apply_set(config_dict_template, args_set)
         config = config_from_dict(config_dict_template)
+        update_hv(config.voltage_hv)
 
         frames = read_frames(ro, fastreadout, config, tqdm.tqdm())
 
