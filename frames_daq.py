@@ -32,7 +32,7 @@ def main(
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
-    from hitpix1 import HitPix1DacConfig, HitPix1Readout
+    from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
 
     ############################################################################

@@ -6,7 +6,7 @@ import datetime
 import numpy as np
 from typing import cast
 
-from hitpix1 import HitPix1DacConfig
+from hitpix.hitpix1 import HitPix1DacConfig
 
 ################################################################################
 

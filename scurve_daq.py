@@ -21,7 +21,7 @@ def main(
     import hitpix.defaults
     import util.configuration
     import util.gridscan
-    from hitpix1 import HitPix1DacConfig, HitPix1Readout
+    from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
     from scurve.daq import measure_scurves
     from scurve.io import SCurveConfig, save_scurve

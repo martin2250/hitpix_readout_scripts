@@ -6,7 +6,7 @@ from typing import cast
 
 import h5py
 import numpy as np
-from hitpix1 import *
+from hitpix.hitpix1 import HitPix1DacConfig
 
 
 @dataclass

@@ -1,14 +1,15 @@
 import time
 from typing import Optional
 
-import hitpix_roprog
 import numpy as np
 import tqdm
-from hitpix1 import HitPix1Readout
+from hitpix.hitpix1 import HitPix1Readout
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish
+from readout.sm_prog import decode_column_packets, prog_dac_config
 
 from .io import SCurveConfig
+from .ro_prog import TestInjection
 
 
 def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurveConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
@@ -21,14 +22,14 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     ro.set_treshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
-    ro.sm_exec(hitpix_roprog.prog_dac_config(config.dac_cfg.generate(), 7))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
 
     time.sleep(0.1)
 
     ############################################################################
     # prepare statemachine
 
-    test_injection = hitpix_roprog.TestInjection(
+    test_injection = TestInjection(
         config.injections_per_round, config.shift_clk_div)
     prog_injection = test_injection.prog_test()
     prog_injection.append(Finish())
@@ -71,7 +72,7 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
         assert response.data is not None
 
         # decode hits
-        _, hits = hitpix_roprog.decode_column_packets(response.data)
+        _, hits = decode_column_packets(response.data)
         hits = (256 - hits) % 256  # counter count down
 
         # sum over all hit frames

@@ -1,12 +1,16 @@
-from hitpix1 import HitPix1Readout
-from readout.fast_readout import FastReadout
-from .io import FrameConfig
-from typing import Optional
-import tqdm
-import numpy as np
-import hitpix_roprog
 import time
+from typing import Optional
+
+import numpy as np
+import tqdm
+from readout.fast_readout import FastReadout
 from readout.instructions import Finish
+
+from hitpix.hitpix1 import HitPix1Readout
+from readout.sm_prog import decode_column_packets, prog_dac_config
+from .io import FrameConfig
+from .sm_prog import prog_read_frames
+
 
 def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
     ############################################################################
@@ -15,13 +19,13 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     ro.set_treshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
-    ro.sm_exec(hitpix_roprog.prog_dac_config(config.dac_cfg.generate(), 7))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
 
     time.sleep(0.025)
 
     ############################################################################
     # prepare statemachine
-    prog_init, prog_readout = hitpix_roprog.prog_read_frames(
+    prog_init, prog_readout = prog_read_frames(
         frame_cycles=int(ro.frequency_mhz * config.frame_length_us),
         pulse_cycles=10,
         shift_clk_div=config.shift_clk_div,
@@ -64,7 +68,7 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
         assert response.data is not None
 
         # decode hits
-        block_timestamps, block_frames = hitpix_roprog.decode_column_packets(response.data)
+        block_timestamps, block_frames = decode_column_packets(response.data)
         block_frames = (256 - block_frames) % 256  # counter count down
         frames.append(block_frames.reshape(-1, 24, 24))
         timestamps.append(block_timestamps)
