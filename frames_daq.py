@@ -29,6 +29,7 @@ def main(
     import hitpix.defaults
     import util.configuration
     import util.gridscan
+    import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
     from hitpix1 import HitPix1DacConfig, HitPix1Readout
@@ -82,19 +83,7 @@ def main(
 
     ############################################################################
 
-    hv_current = -1.0
-
-    def update_hv(voltage_hv: float):
-        nonlocal hv_current
-        if voltage_hv == hv_current:
-            return
-        hv_current = voltage_hv
-        if hv_driver == 'manual':
-            print(f'please set HV to {hv_current:0.2f}V')
-            input('press enter to continue')
-        else:
-            print(f'unknown hv driver: {hv_driver}')
-            exit(1)
+    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver)
 
     ############################################################################
 
@@ -121,7 +110,7 @@ def main(
                     util.gridscan.apply_set(config_dict, args_set)
                     # extract all values
                     config = config_from_dict(config_dict)
-                    update_hv(config.voltage_hv)
+                    hv_channel.set_voltage(config.voltage_hv)
                     # perform measurement
                     prog_meas.reset()
                     for _ in range(3):
@@ -145,7 +134,7 @@ def main(
         else:
             util.gridscan.apply_set(config_dict_template, args_set)
             config = config_from_dict(config_dict_template)
-            update_hv(config.voltage_hv)
+            hv_channel.set_voltage(config.voltage_hv)
 
             frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
 
@@ -180,6 +169,13 @@ if __name__ == '__main__':
         '--set', metavar=('name=expression'),
         action='append',
         help='set parameter',
+    )
+
+    parser.add_argument(
+        '--hv_driver',
+        choices=('manual', 'keithley2400'),
+        default='manual',
+        help='use SMU interface to set HV',
     )
 
     # TODO: implement this
@@ -217,4 +213,5 @@ if __name__ == '__main__':
         args_scan=args.scan or [],
         args_set=args.set or [],
         read_adders=args.adders,
+        hv_driver=args.hv_driver,
     )
