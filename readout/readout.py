@@ -152,7 +152,7 @@ class Readout:
             raise Exception('time not synchronized')
         counter_sync, time_sync = self._time_sync
         counter_diff = (counter - counter_sync) & ((1 << 32) - 1) # convert to unsigned
-        return time_sync + counter_diff * 0.5e-6
+        return time_sync + counter_diff * 1e-6
     
     def set_injection_ctrl(self, on_cycles: int, off_cycles: int) -> None:
         assert (on_cycles - 1) in range(1 << 12)
