@@ -1,7 +1,7 @@
 #!/usr/bin/python
 from typing import Any, Iterable, Union, Optional
 import serial
-from . import statemachine
+from . import instructions
 import time
 from cobs import cobs
 import threading
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from . import Response
 
-InstructionsLike = Union[list[int], list[statemachine.Instruction]]
+InstructionsLike = Union[list[int], list[instructions.Instruction]]
 
 class Readout:
     # commands

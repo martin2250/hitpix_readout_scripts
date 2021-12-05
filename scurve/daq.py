@@ -6,7 +6,7 @@ import numpy as np
 import tqdm
 from hitpix1 import HitPix1Readout
 from readout.fast_readout import FastReadout
-from readout.statemachine import Finish
+from readout.instructions import Finish
 
 from .io import SCurveConfig
 

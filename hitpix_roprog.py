@@ -1,6 +1,6 @@
 from time import sleep
 from typing import Union
-from readout.statemachine import *
+from readout.instructions import *
 import bitarray, bitarray.util
 import numpy as np
 import unittest

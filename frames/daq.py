@@ -6,7 +6,7 @@ import tqdm
 import numpy as np
 import hitpix_roprog
 import time
-from readout.statemachine import Finish
+from readout.instructions import Finish
 
 def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
     ############################################################################

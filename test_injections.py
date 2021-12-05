@@ -1,13 +1,14 @@
 #!/usr/bin/python
-from statemachine import *
+from readout.instructions import *
 import hitpix_roprog
 import serial
 import time
 import datetime
 import bitarray
 import sys
+from hitpix1 import HitPix1DacConfig
 from hitpix1 import *
-from readout import FastReadout, Response
+from readout.fast_readout import FastReadout
 
 ro = HitPix1Readout('/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
 ro.initialize()
