@@ -9,6 +9,7 @@ def main(
     injections_per_round: int,
     args_scan: list[str],
     args_set: list[str],
+    read_noise: bool,
 ):
     import copy
     import time
@@ -98,7 +99,7 @@ def main(
                     for _ in range(3):
                         try:
                             res = measure_scurves(
-                                ro, fastreadout, config, prog_meas)
+                                ro, fastreadout, config, read_noise, prog_meas)
                             # store measurement
                             group = file.create_group(group_name)
                             save_scurve(group, config, *res)
@@ -117,7 +118,7 @@ def main(
             util.gridscan.apply_set(config_dict_template, args_set)
             config = config_from_dict(config_dict_template)
 
-            res = measure_scurves(ro, fastreadout, config, tqdm.tqdm())
+            res = measure_scurves(ro, fastreadout, config, read_noise, tqdm.tqdm())
 
             with h5py.File(path_output, 'w') as file:
                 group = file.create_group('scurve')
@@ -167,11 +168,10 @@ if __name__ == '__main__':
         help='set parameter',
     )
 
-    # TODO: implement this
     parser.add_argument(
-        '--no-noise',
+        '--read_noise',
         action='store_true',
-        help='do not record noise hits, inject into whole row',
+        help='also read noise hits, inject into half row at a time',
     )
 
     try:
@@ -201,4 +201,5 @@ if __name__ == '__main__':
         injections_per_round=args.injections[1],
         args_scan=args.scan or [],
         args_set=args.set or [],
+        read_noise=args.read_noise,
     )

@@ -9,10 +9,10 @@ from readout.instructions import Finish
 from readout.sm_prog import decode_column_packets, prog_dac_config
 
 from .io import SCurveConfig
-from .ro_prog import TestInjection
+from .sm_prog import prog_injections_full, prog_injections_half
 
 
-def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurveConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
+def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurveConfig, read_noise: bool, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
     ############################################################################
     # configure readout & chip
 
@@ -29,9 +29,10 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     ############################################################################
     # prepare statemachine
 
-    test_injection = TestInjection(
-        config.injections_per_round, config.shift_clk_div)
-    prog_injection = test_injection.prog_test()
+    if read_noise:
+        prog_injection = prog_injections_half(config.injections_per_round, config.shift_clk_div)
+    else:
+        prog_injection = prog_injections_full(config.injections_per_round, config.shift_clk_div)
     prog_injection.append(Finish())
     ro.sm_write(prog_injection)
 
@@ -75,24 +76,34 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
         _, hits = decode_column_packets(response.data)
         hits = (256 - hits) % 256  # counter count down
 
-        # sum over all hit frames
-        hits = hits.reshape(-1, 48, 24)
-        hits = np.sum(hits, axis=0)
 
-        # separate signal and noise columns
-        even = hits[:24]
-        odd = hits[24:]
+        if read_noise:
+            # sum over all hit frames
+            hits = hits.reshape(-1, 48, 24)
+            hits = np.sum(hits, axis=0)
 
-        hits_signal.append(np.where(
-            np.arange(24) % 2 == 0,
-            even, odd,
-        ))
-        hits_noise.append(np.where(
-            np.arange(24) % 2 == 1,
-            even, odd,
-        ))
+            # separate signal and noise columns
+            even = hits[:24]
+            odd = hits[24:]
+
+            hits_signal.append(np.where(
+                np.arange(24) % 2 == 0,
+                even, odd,
+            ))
+            hits_noise.append(np.where(
+                np.arange(24) % 2 == 1,
+                even, odd,
+            ))
+        else:
+            # sum over all hit frames
+            hits = hits.reshape(-1, 24, 24)
+            hits = np.sum(hits, axis=0)
+            hits_signal.append(hits)
 
     hits_signal = np.array(hits_signal)
-    hits_noise = np.array(hits_noise)
 
-    return hits_signal, hits_noise
+    if read_noise:
+        hits_noise = np.array(hits_noise)
+        return hits_signal, hits_noise
+    else:
+        return hits_signal, None

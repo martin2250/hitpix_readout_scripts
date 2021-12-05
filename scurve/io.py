@@ -2,7 +2,7 @@ import dataclasses
 import datetime
 import json
 from dataclasses import dataclass
-from typing import cast
+from typing import Optional, cast
 
 import h5py
 import numpy as np
@@ -39,27 +39,32 @@ class SCurveConfig:
         )
 
 
-def save_scurve(h5group: h5py.Group, config: SCurveConfig, hits_signal: np.ndarray, hits_noise: np.ndarray):
+def save_scurve(h5group: h5py.Group, config: SCurveConfig, hits_signal: np.ndarray, hits_noise: Optional[np.ndarray]):
     # attributes
     h5group.attrs['save_time'] = datetime.datetime.now().isoformat()
     h5group.attrs['config'] = json.dumps(config.asdict())
     # data
     h5group.create_dataset('hits_signal', data=hits_signal, compression='gzip')
-    h5group.create_dataset('hits_noise', data=hits_noise, compression='gzip')
+    if hits_noise:
+        h5group.create_dataset('hits_noise', data=hits_noise, compression='gzip')
 
 
-def load_scurve(h5group: h5py.Group) -> tuple[SCurveConfig, np.ndarray, np.ndarray]:
+def load_scurve(h5group: h5py.Group) -> tuple[SCurveConfig, np.ndarray, Optional[np.ndarray]]:
     # load attributes
     config = SCurveConfig.fromdict(
         json.loads(cast(str, h5group.attrs['config'])))
     # load datasets
     dset_signal = h5group['hits_signal']
-    dset_noise = h5group['hits_noise']
     assert isinstance(dset_signal, h5py.Dataset)
-    assert isinstance(dset_noise, h5py.Dataset)
     hits_signal = dset_signal[()]
-    hits_noise = dset_noise[()]
     assert isinstance(hits_signal, np.ndarray)
-    assert isinstance(hits_noise, np.ndarray)
 
-    return config, hits_signal, hits_noise
+    if 'hits_noise' in h5group:
+        dset_noise = h5group['hits_noise']
+        assert isinstance(dset_noise, h5py.Dataset)
+        hits_noise = dset_noise[()]
+        assert isinstance(hits_noise, np.ndarray)
+
+        return config, hits_signal, hits_noise
+    else:
+        return config, hits_signal, None
