@@ -83,7 +83,10 @@ def main(
 
     ############################################################################
 
-    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver)
+    if hv_driver == 'default':
+        hv_driver = board.default_hv_driver
+
+    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, board)
 
     ############################################################################
 
@@ -143,6 +146,7 @@ def main(
                 save_frames(group, config, frames, times)
     finally:
         fastreadout.close()
+        hv_channel.shutdown()
 
 
 if __name__ == '__main__':
@@ -173,8 +177,8 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--hv_driver',
-        choices=('manual', 'keithley2400'),
-        default='manual',
+        choices=('default', 'manual', 'keithley2400'),
+        default='default',
         help='use SMU interface to set HV',
     )
 

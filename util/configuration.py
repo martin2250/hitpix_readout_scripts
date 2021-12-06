@@ -7,6 +7,8 @@ import pathlib
 @dataclass
 class ReadoutBoardConfig:
     fastreadout_serial_number: str
+    default_hv_driver: str
+    hv_smu_serial_port: str
 
 @dataclass
 class HitpixReadoutConfig:
@@ -47,7 +49,11 @@ def load_config() -> HitpixReadoutConfig:
     for section in config.sections():
         if section == 'DEFAULT':
             continue
-        boards[section] = ReadoutBoardConfig(config[section]['fastreadout_serial'])
+        conf_section = config[section]
+        fastreadout_serial = conf_section.get('fastreadout_serial')
+        default_hv_driver = conf_section.get('default_hv_driver', 'manual')
+        hv_smu_serial_port = conf_section.get('hv_smu_serial_port')
+        boards[section] = ReadoutBoardConfig(fastreadout_serial, default_hv_driver, hv_smu_serial_port)
 
     return HitpixReadoutConfig(
         serial_baud=serial_baud,
