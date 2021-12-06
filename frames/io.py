@@ -21,7 +21,7 @@ class FrameConfig:
     pause_length_us: float
     read_adders: bool
     shift_clk_div: int = 1
-    frames_per_run: int = 50
+    frames_per_run: int = 100
 
     def asdict(self) -> dict:
         d = dataclasses.asdict(self)
