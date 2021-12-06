@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 from readout.instructions import *
 import hitpix_roprog
 import serial

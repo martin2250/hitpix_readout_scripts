@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 import argparse
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
