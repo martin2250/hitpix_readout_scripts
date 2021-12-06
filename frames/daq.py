@@ -41,7 +41,9 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
 
     # total number of injection cycles, round up
     num_runs = int(config.num_frames / config.frames_per_run + 0.99)
-    responses = []
+    responses = [fastreadout.expect_response() for _ in range(num_runs)]
+
+    duration_run = 1e-6 * config.frames_per_run * (config.frame_length_us + config.pause_length_us)
 
     if progress is not None:
         progress.total = num_runs
@@ -49,9 +51,8 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     # test all voltages
     for _ in range(num_runs):
         # start measurement
-        responses.append(fastreadout.expect_response())
         ro.sm_start(config.frames_per_run)
-        ro.wait_sm_idle()
+        ro.wait_sm_idle(1.0 + duration_run)
         if progress is not None:
             progress.update()
 
