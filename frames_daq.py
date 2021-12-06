@@ -125,6 +125,8 @@ def main(
                             save_frames(group, config, frames, times)
                             prog_scan.update()
                             break
+                        except KeyboardInterrupt:
+                            raise KeyboardInterrupt()
                         except Exception as e:
                             prog_scan.write(f'Exception: {repr(e)}')
                             # restart fastreadout on failure
@@ -144,6 +146,8 @@ def main(
             with h5py.File(path_output, 'w') as file:
                 group = file.create_group('frames')
                 save_frames(group, config, frames, times)
+    except BaseException as e:
+        print(e)
     finally:
         fastreadout.close()
         hv_channel.shutdown()

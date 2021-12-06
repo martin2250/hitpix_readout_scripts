@@ -105,6 +105,8 @@ def main(
                             save_scurve(group, config, *res)
                             prog_scan.update()
                             break
+                        except KeyboardInterrupt:
+                            raise KeyboardInterrupt()
                         except Exception as e:
                             prog_scan.write(f'Exception: {repr(e)}')
                             # restart fastreadout on failure
@@ -123,6 +125,8 @@ def main(
             with h5py.File(path_output, 'w') as file:
                 group = file.create_group('scurve')
                 save_scurve(group, config, *res)
+    except BaseException as e:
+        print(e)
     finally:
         fastreadout.close()
 
