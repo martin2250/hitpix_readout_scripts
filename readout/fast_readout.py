@@ -15,10 +15,14 @@ class FastReadout:
         # open FTDI
         FT_FLOW_RTS_CTS = 0x0100
         self.ftdi = pylibftdi.Device(self.serial_number)
+        self.ftdi.ftdi_fn.ftdi_usb_purge_rx_buffer()
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
         time.sleep(10e-3)
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
         self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
+        for _ in range(3):
+            time.sleep(50e-3)
+            self.ftdi.ftdi_fn.ftdi_usb_purge_rx_buffer()
         # start RX thread
         self.event_stop = threading.Event()
         self.thread_read = threading.Thread(target=self.read, daemon=True, name='fastreadout')
@@ -30,10 +34,6 @@ class FastReadout:
         self.ftdi.close()
 
     def read(self) -> None:
-        # read remaining data from buffer
-        time.sleep(0.05)
-        while self.ftdi.read(16*4096):
-            time.sleep(0.05)
         buffer = bytearray()
         while not self.event_stop.is_set():
             data_new = self.ftdi.read(16*4096)
