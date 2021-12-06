@@ -1,15 +1,13 @@
 #!/usr/bin/python
 import argparse
-from typing import cast
 
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-import tqdm
-from matplotlib.axes import Axes
 from matplotlib.widgets import Slider
-import util.gridscan
+
 import frames.io
+import util.gridscan
 
 ################################################################################
 
@@ -76,9 +74,10 @@ if __name__ == '__main__':
     gs = fig.add_gridspec(2, 2)
 
     # plot layout
-    ax_map   = fig.add_subplot(gs[1, 0]) # hit map for slider settings
-    ax_hist  = fig.add_subplot(gs[0, 0]) # histogram of hit map
-    ax_curve = fig.add_subplot(gs[0, 1]) # total hits over selected slider setting
+    ax_map = fig.add_subplot(gs[1, 0])  # hit map for slider settings
+    ax_hist = fig.add_subplot(gs[0, 0])  # histogram of hit map
+    # total hits over selected slider setting
+    ax_curve = fig.add_subplot(gs[0, 1])
     gs_sliders = gs[1, 1]                # space for sliders
 
     # interactive state
@@ -89,31 +88,38 @@ if __name__ == '__main__':
     sliders = []
     slider_bb = gs_sliders.get_position(fig)
     slider_height = (slider_bb.y1 - slider_bb.y0) / (len(scan_shape) + 1)
-    for i_slider, param in enumerate(scan_parameters):
-        ax_slider = fig.add_axes([
+    def ax_slider(i: int):
+        return fig.add_axes([
             slider_bb.x0,
-            slider_bb.y0 + slider_height * i_slider,
+            slider_bb.y0 + slider_height * i,
             slider_bb.x1 - slider_bb.x0,
             slider_height,
         ])
+    for i_param, param in enumerate(scan_parameters):
         sliders.append(Slider(
-            ax=ax_slider,
+            ax=ax_slider(i_param),
             label=param.name,
             valmin=param.values[0],
             valmax=param.values[-1],
             valinit=param.values[0],
             valstep=param.values,
         ))
+    slider_range = Slider(
+        ax=ax_slider(len(scan_shape)),
+        label='range',
+        valmin=0.0,
+        valmax=1.0,
+        valinit=1.0,
+    )
 
     # data ranges
-    range_hits = np.min(hits_frames), np.percentile(hits_frames, 80)
-    # range_hits = np.min(hits_frames), np.max(hits_frames)
+    range_hits_full = max(np.min(hits_frames), 10), np.max(hits_frames)
+    range_hits = range_hits_full
 
     # plot histograms
+    ax_hist.set_xlabel('Hits')
     _, bins_hits, bars_hits = ax_hist.hist(
         hits_frames[idx_scan].flat, bins=30, range=range_hits)
-
-    ax_hist.set_xlabel('Hits')
 
     def redraw_hists():
         data_hits, _ = np.histogram(
@@ -170,6 +176,24 @@ if __name__ == '__main__':
 
     for slider in sliders:
         slider.on_changed(slider_on_changed)
+
+    ############################################################################
+    
+    def slider_range_onchanged(_):
+        global range_hits, bins_hits, bars_hits
+        log_min = np.log(range_hits_full[0])
+        log_max = np.log(range_hits_full[1])
+        log_new = log_min + slider_range.val * (log_max - log_min)
+        range_hits = (range_hits_full[0], np.exp(log_new))
+        # update map
+        im_hits.set(clim=range_hits)
+        # update histogram
+        ax_hist.clear()
+        _, bins_hits, bars_hits = ax_hist.hist(
+            hits_frames[idx_scan].flat, bins=30, range=range_hits)
+        ax_hist.set_xlabel('Hits')
+
+    slider_range.on_changed(slider_range_onchanged)
 
     # plot
     plt.ion()
