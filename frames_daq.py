@@ -92,7 +92,7 @@ def main(
 
     try:
         if scan_parameters:
-            with h5py.File(path_output, 'w') as file:
+            with h5py.File(path_output, 'a') as file:
                 # save scan parameters first
                 group_scan = file.require_group('scan')
                 util.gridscan.save_scan(group_scan, scan_parameters)
@@ -115,8 +115,8 @@ def main(
                     config = config_from_dict(config_dict)
                     hv_channel.set_voltage(config.voltage_hv)
                     # perform measurement
-                    prog_meas.reset()
                     for _ in range(3):
+                        prog_meas.reset()
                         try:
                             frames, times = read_frames(
                                 ro, fastreadout, config, prog_meas)
@@ -128,11 +128,21 @@ def main(
                         except KeyboardInterrupt:
                             raise KeyboardInterrupt()
                         except Exception as e:
+                            import traceback
                             prog_scan.write(f'Exception: {repr(e)}')
-                            # restart fastreadout on failure
+                            prog_scan.write(traceback.format_exc())
+                            prog_scan.write('stopping readout')
+                            # restart readout on failure
+                            ro.close()
                             fastreadout.close()
+                            time.sleep(1)
+                            prog_scan.write('restarting readout')
+                            ro = HitPix1Readout(serial_port_name)
+                            ro.wait_sm_idle()
+                            ro.initialize()
                             fastreadout = FastReadout(
                                 board.fastreadout_serial_number)
+                            prog_scan.write('-----------')
                     else:
                         raise Exception('too many retries')
 

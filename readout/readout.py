@@ -47,16 +47,22 @@ class Readout:
     def __init__(self, serial_name: str, timeout: float = 0.5) -> None:
         self._serial_port = serial.Serial(serial_name, 3_000_000)
         self._response_queue: queue.Queue[Response] = queue.Queue()
+        self.event_stop = threading.Event()
         self._thread_read_serial = threading.Thread(target=self._read_serial, daemon=True, name='readout')
         self._thread_read_serial.start()
         self._timeout = timeout
         self._time_sync: Optional[tuple[int, float]] = None
         self._serial_port.set_low_latency_mode(True)
+    
+    def close(self) -> None:
+        self.event_stop.set()
+        self._thread_read_serial.join()
+        self._serial_port.close()
 
     def _read_serial(self):
         self._serial_port.reset_input_buffer()
         buffer = bytearray()
-        while True:
+        while not self.event_stop.is_set():
             data_new = self._serial_port.read_all()
             if data_new is None:
                 time.sleep(0.001)

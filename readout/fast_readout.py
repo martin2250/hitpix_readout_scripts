@@ -23,6 +23,7 @@ class FastReadout:
         for _ in range(3):
             time.sleep(50e-3)
             self.ftdi.ftdi_fn.ftdi_usb_purge_rx_buffer()
+            self.ftdi.read(16*4096)
         # start RX thread
         self.event_stop = threading.Event()
         self.thread_read = threading.Thread(target=self.read, daemon=True, name='fastreadout')
