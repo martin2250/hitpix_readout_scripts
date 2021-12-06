@@ -1,4 +1,3 @@
-#!/usr/bin/python
 from typing import Any, Iterable, Union, Optional
 import serial
 from . import instructions
@@ -20,6 +19,7 @@ class Readout:
     CMD_SM_WRITE       = 0x11
     CMD_SM_START       = 0x12
     CMD_SM_ABORT       = 0x13
+    CMD_FAST_TX_FLUSH  = 0x14
     CMD_HITPIX_DAC     = 0x20
     CMD_FUNCTION_CARD  = 0x30
     # registers
@@ -81,7 +81,7 @@ class Readout:
                     response.data = packet
                     response.event.set()
                 except queue.Empty:
-                    print('received unexpected response', packet)
+                    print('readout received unexpected response', packet)
     
     def _expect_response(self) -> Response:
         response = Response()
@@ -146,6 +146,10 @@ class Readout:
     def sm_abort(self) -> None:
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_ABORT]))
+
+    def fast_tx_flush(self) -> None:
+        self._expect_response()
+        self.send_packet(bytes([self.CMD_FAST_TX_FLUSH]))
     
     def synchronize(self) -> None:
         sync_time = time.time()
@@ -172,6 +176,7 @@ class Readout:
     def initialize(self) -> None:
         try:
             # set all enable pins high
+            self.fast_tx_flush()
             self._write_function_card_raw(b'\xff')
             self.synchronize()
             if not self.get_sm_status().idle:

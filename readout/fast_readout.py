@@ -54,7 +54,7 @@ class FastReadout:
                     response.data = cobs.decode(packet)
                     response.event.set()
                 except queue.Empty:
-                    print('received unexpected response', packet)
+                    print('fastro: received unexpected response', packet)
 
     def expect_response(self) -> Response:
         response = Response()
