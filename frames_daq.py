@@ -16,7 +16,8 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     read_adders: bool,
-    hv_driver: str = 'manual'
+    file_continue: bool,
+    hv_driver: str = 'manual',
 ):
     import copy
     import time
@@ -63,12 +64,13 @@ def main(
 
     path_output = Path(output_file)
     if path_output.exists():
-        res = input(
-            f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
-        if res.lower() == 'd':
-            path_output.unlink()
-        elif res.lower() != 'c':
-            exit()
+        if not file_continue:
+            res = input(
+                f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+            if res.lower() == 'd':
+                path_output.unlink()
+            elif res.lower() != 'c':
+                exit()
 
     ############################################################################
     # open readout
@@ -89,6 +91,8 @@ def main(
     hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, board)
 
     ############################################################################
+
+    retcode = 0
 
     try:
         if scan_parameters:
@@ -118,6 +122,7 @@ def main(
                     for _ in range(3):
                         prog_meas.reset()
                         try:
+                            ro.sm_abort()
                             frames, times = read_frames(
                                 ro, fastreadout, config, prog_meas)
                             # store measurement
@@ -128,11 +133,13 @@ def main(
                         except KeyboardInterrupt:
                             raise KeyboardInterrupt()
                         except Exception as e:
+                            raise e
                             import traceback
                             prog_scan.write(f'Exception: {repr(e)}')
                             prog_scan.write(traceback.format_exc())
                             prog_scan.write('stopping readout')
                             # restart readout on failure
+                            ro.sm_abort()
                             ro.close()
                             fastreadout.close()
                             time.sleep(1)
@@ -157,10 +164,12 @@ def main(
                 group = file.create_group('frames')
                 save_frames(group, config, frames, times)
     except BaseException as e:
-        print(e)
+        raise e
+        retcode = 1
     finally:
         fastreadout.close()
         hv_channel.shutdown()
+    exit(retcode)
 
 
 if __name__ == '__main__':
@@ -203,6 +212,13 @@ if __name__ == '__main__':
         help='only read adders instead of full matrix',
     )
 
+    parser.add_argument(
+        '--continue',
+        dest='file_continue',
+        action='store_true',
+        help='when file exists, continue measurement',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
@@ -232,4 +248,5 @@ if __name__ == '__main__':
         args_set=args.set or [],
         read_adders=args.adders,
         hv_driver=args.hv_driver,
+        file_continue=args.file_continue,
     )
