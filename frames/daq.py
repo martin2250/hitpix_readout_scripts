@@ -27,7 +27,7 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     # prepare statemachine
     prog_init, prog_readout = prog_read_frames(
         frame_cycles=int(ro.frequency_mhz * config.frame_length_us),
-        pulse_cycles=10,
+        pulse_cycles=50,
         shift_clk_div=config.shift_clk_div,
         pause_cycles=int(ro.frequency_mhz * config.pause_length_us),
     )

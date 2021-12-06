@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
+from hitpix import hitpix1
 from readout.instructions import *
-import hitpix_roprog
 import serial
 import time
 import datetime
 import bitarray
 import sys
-from hitpix1 import HitPix1DacConfig
-from hitpix1 import *
+from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout, HitPix1ColumnConfig, HitPix1Pins
+from typing import Union
+from readout.sm_prog import prog_dac_config, prog_shift_dense, decode_column_packets
 from readout.fast_readout import FastReadout
 
 ro = HitPix1Readout('/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A6003YJ6-if00-port0')
@@ -21,8 +22,8 @@ ro.set_injection_voltage(1.0)
 
 # configure DAC
 ro.sm_exec(
-    hitpix_roprog.prog_dac_config(
-        HitPix1DacConfig().generate(),
+    prog_dac_config(
+        HitPix1DacConfig.default().generate(),
         4,
     ),
 )
@@ -118,7 +119,7 @@ def prog_full_readout(shift_clk_div: int) -> list[Instruction]:
 
 fastreadout = FastReadout('')
 
-prog_readout = hitpix_roprog.prog_full_readout(1)
+prog_readout = prog_full_readout(1)
 prog_readout.append(Finish())
 ro.sm_write(prog_readout)
 
@@ -134,7 +135,7 @@ for row in range(rows):
         0,
         24,
     ).generate()
-    ro.sm_exec(hitpix_roprog.prog_inject(100, col_cfg_inj))
+    ro.sm_exec(prog_inject(100, col_cfg_inj))
     ro.sm_start()
 
     while True:
@@ -149,7 +150,7 @@ for row, response in enumerate(responses):
     assert response.data is not None
 
     print('-'*30 + f'{row:4d}   ' + '-'*30)
-    timestamps, hits = hitpix_roprog.decode_column_packets(response.data)
+    timestamps, hits = decode_column_packets(response.data)
     for timestamp, hit, row_ro in zip(timestamps, hits, range(100)):
         hit = (256 - hit) % 256
         dt = datetime.datetime.fromtimestamp(ro.convert_time(timestamp)).time()
