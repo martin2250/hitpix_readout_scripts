@@ -2,6 +2,7 @@
 import argparse
 
 import h5py
+from matplotlib.backend_bases import MouseEvent
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.widgets import Slider
@@ -96,14 +97,16 @@ if __name__ == '__main__':
             slider_height,
         ])
     for i_param, param in enumerate(scan_parameters):
-        sliders.append(Slider(
+        slider = Slider(
             ax=ax_slider(i_param),
             label=param.name,
             valmin=param.values[0],
             valmax=param.values[-1],
             valinit=param.values[0],
             valstep=param.values,
-        ))
+        )
+        slider.parameter_id = i_param
+        sliders.append(slider)
     slider_range = Slider(
         ax=ax_slider(len(scan_shape)),
         label='range',
@@ -158,11 +161,8 @@ if __name__ == '__main__':
     redraw_curve()
 
     # add change handler
-    def slider_on_changed(changed_slider):
-        global idx_scan, sliders, scan_parameters, id_slider
-        for i_slider, slider in enumerate(sliders):
-            if slider == changed_slider:
-                id_slider = i_slider
+    def slider_on_changed(_):
+        global idx_scan, sliders, scan_parameters
         idx_new = []
         for slider, param in zip(sliders, scan_parameters):
             idx_new.append(np.argmax(param.values == slider.val))
@@ -176,6 +176,14 @@ if __name__ == '__main__':
 
     for slider in sliders:
         slider.on_changed(slider_on_changed)
+
+    def press_event(event: MouseEvent):
+        global id_slider
+        for i_slider, slider in enumerate(sliders):
+            if event.inaxes == slider.ax:
+                id_slider = i_slider
+
+    fig.canvas.mpl_connect('button_press_event', press_event)
 
     ############################################################################
     
