@@ -149,6 +149,8 @@ if __name__ == '__main__':
     ax_curve.set_yscale('log')
 
     def redraw_curve():
+        if len(scan_shape) == 0:
+            return
         sum_axes = list(range(len(hits_frames.shape)))
         del sum_axes[id_slider]
         data_x = scan_parameters[id_slider].values
