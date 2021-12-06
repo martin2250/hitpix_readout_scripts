@@ -41,6 +41,7 @@ class Keithley2400VoltageChannel(VoltageChannel):
         self.smu.reset()
         time.sleep(0.1)
         self.smu.apply_voltage(compliance_current=120e-6)
+        self.smu.measure_voltage()
         self.smu.auto_range_source()
     
     def set_voltage(self, voltage: float) -> None:
@@ -52,13 +53,13 @@ class Keithley2400VoltageChannel(VoltageChannel):
         # send to SMU
         self.smu.source_voltage = voltage
         self.smu.enable_source()
-        time.sleep(0.05)
-        voltage_readback = self.smu.voltage[0]
-        if abs(voltage - voltage_readback) > 0.1:
-            print('voltage difference larger than 0.1V')
-            print(f'{voltage=}V')
-            print(f'{voltage_readback=}V')
-            input('continue?')
+        for _ in range(5):
+            time.sleep(0.05)
+            voltage_readback = self.smu.voltage
+            if abs(voltage - voltage_readback) < 0.1:
+                break
+        else:
+            raise RuntimeError(f'SMU voltage difference too large ({self.smu.voltage} V / {voltage} V)')
     
     def shutdown(self) -> None:
         self.smu.shutdown()
