@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from typing import Any
 
 import h5py
 from matplotlib.backend_bases import MouseEvent
@@ -114,6 +115,7 @@ if __name__ == '__main__':
         valmax=1.0,
         valinit=1.0,
     )
+    sliders[id_slider].label.set_backgroundcolor('lightgreen')
 
     # data ranges
     range_hits_full = max(np.min(hits_frames), 10), np.max(hits_frames)
@@ -151,12 +153,12 @@ if __name__ == '__main__':
     def redraw_curve():
         if len(scan_shape) == 0:
             return
-        sum_axes = list(range(len(hits_frames.shape)))
-        del sum_axes[id_slider]
-        data_x = scan_parameters[id_slider].values
-        data_y = np.sum(hits_frames, axis=tuple(sum_axes))
-        line_data.set_xdata(data_x)
+        idx_curve: list[Any] = list(idx_scan)
+        idx_curve[id_slider] = Ellipsis
+        data_y = np.sum(hits_frames[tuple(idx_curve)], axis=(-1, -2))
         line_data.set_ydata(data_y)
+        data_x = scan_parameters[id_slider].values
+        line_data.set_xdata(data_x)
         ax_curve.set_xlim(np.min(data_x), np.max(data_x))
         ax_curve.set_ylim(np.min(data_y), np.max(data_y))
         ax_curve.set_xlabel(scan_parameters[id_slider].name)
@@ -181,9 +183,16 @@ if __name__ == '__main__':
 
     def press_event(event: MouseEvent):
         global id_slider
+        # do not accept left click
+        if event.button == 1:
+            return
         for i_slider, slider in enumerate(sliders):
             if event.inaxes == slider.ax:
+                sliders[id_slider].label.set_backgroundcolor('white')
                 id_slider = i_slider
+                sliders[id_slider].label.set_backgroundcolor('lightgreen')
+                redraw_curve()
+                return
 
     fig.canvas.mpl_connect('button_press_event', press_event)
 
