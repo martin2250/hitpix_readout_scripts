@@ -151,9 +151,9 @@ if __name__ == '__main__':
         ])
         sliders.append(Slider(
             ax=ax_slider,
-            label=param.name,
-            valmin=param.values[0],
-            valmax=param.values[-1],
+            label=param.name if (param.values[0] < param.values[-1]) else f'{param.name} (rev)',
+            valmin=np.min(param.values),
+            valmax=np.max(param.values),
             valinit=param.values[0],
             valstep=param.values,
         ))
