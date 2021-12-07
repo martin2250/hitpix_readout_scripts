@@ -4,6 +4,8 @@ import argparse
 
 def __get_config_dict_ext() -> dict:
     return {
+        'vssa': 1.25,
+        'vdd': 1.85,
         'frame_us': 5000.0,
         'pause_us': 0.0,
         'hv': 5.0,
@@ -17,7 +19,10 @@ def main(
     args_set: list[str],
     read_adders: bool,
     file_continue: bool,
+    sums_only: bool,
     hv_driver: str = 'manual',
+    vdd_driver: str = 'manual',
+    vssa_driver: str = 'manual',
 ):
     import copy
     import time
@@ -53,6 +58,8 @@ def main(
             dac_cfg=config_dict['dac'],
             voltage_baseline=config_dict['baseline'],
             voltage_threshold=config_dict['threshold'],
+            voltage_vdd=config_dict['vdd'],
+            voltage_vssa=config_dict['vssa'],
             voltage_hv=config_dict['hv'],
             num_frames=num_frames,
             frame_length_us=config_dict['frame_us'],
@@ -88,7 +95,14 @@ def main(
     if hv_driver == 'default':
         hv_driver = board.default_hv_driver
 
-    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, board)
+    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, board, 'HV')
+    vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, board, 'VDD')
+    vssa_channel = util.voltage_channel.open_voltage_channel(vssa_driver, board, 'VSSA')
+
+    def set_voltages(config: FrameConfig):
+        hv_channel.set_voltage(config.voltage_hv)
+        vdd_channel.set_voltage(config.voltage_vdd)
+        vssa_channel.set_voltage(config.voltage_vssa)
 
     ############################################################################
 
@@ -117,7 +131,7 @@ def main(
                     util.gridscan.apply_set(config_dict, args_set)
                     # extract all values
                     config = config_from_dict(config_dict)
-                    hv_channel.set_voltage(config.voltage_hv)
+                    set_voltages(config)
                     # perform measurement
                     for _ in range(3):
                         prog_meas.reset()
@@ -125,6 +139,11 @@ def main(
                             ro.sm_abort()
                             frames, times = read_frames(
                                 ro, fastreadout, config, prog_meas)
+                            
+                            if sums_only:
+                                shape_new = (1, *frames.shape[1:])
+                                frames = frames.sum(axis=0).reshape(*shape_new)
+                                times = times[:1]
                             # store measurement
                             group = file.create_group(group_name)
                             save_frames(group, config, frames, times)
@@ -156,9 +175,14 @@ def main(
         else:
             util.gridscan.apply_set(config_dict_template, args_set)
             config = config_from_dict(config_dict_template)
-            hv_channel.set_voltage(config.voltage_hv)
+            set_voltages(config)
 
             frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
+
+            if sums_only:
+                shape_new = (1, *frames.shape[1:])
+                frames = frames.sum(axis=0).reshape(*shape_new)
+                times = times[:1]
 
             with h5py.File(path_output, 'w') as file:
                 group = file.create_group('frames')
@@ -219,6 +243,12 @@ if __name__ == '__main__':
         help='when file exists, continue measurement',
     )
 
+    parser.add_argument(
+        '--sums_only',
+        action='store_true',
+        help='sum up all frames instead of saving individual frames',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
@@ -249,4 +279,5 @@ if __name__ == '__main__':
         read_adders=args.adders,
         hv_driver=args.hv_driver,
         file_continue=args.file_continue,
+        sums_only=args.sums_only,
     )

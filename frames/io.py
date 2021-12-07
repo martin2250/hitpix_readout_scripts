@@ -15,12 +15,14 @@ class FrameConfig:
     dac_cfg: HitPix1DacConfig
     voltage_baseline: float
     voltage_threshold: float
+    voltage_vdd: float
+    voltage_vssa: float
     voltage_hv: float
     num_frames: int
     frame_length_us: float
     pause_length_us: float
     read_adders: bool
-    shift_clk_div: int = 1
+    shift_clk_div: int = 0
     frames_per_run: int = 250
 
     def asdict(self) -> dict:
@@ -35,6 +37,10 @@ class FrameConfig:
         # TODO: remove this, HV should always be set
         if not 'voltage_hv' in d:
             d['voltage_hv'] = -1
+        if not 'voltage_vdd' in d:
+            d['voltage_vdd'] = -1
+        if not 'voltage_vssa' in d:
+            d['voltage_vssa'] = -1
         return FrameConfig(
             dac_cfg=dac_cfg,
             **d,

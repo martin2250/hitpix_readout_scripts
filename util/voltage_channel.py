@@ -13,14 +13,15 @@ class VoltageChannel(ABC):
         raise NotImplementedError()
 
 class ManualVoltageChannel(VoltageChannel):
-    def __init__(self) -> None:
+    def __init__(self, name: str) -> None:
         self._voltage = float('nan')
+        self.name = name
     
     def set_voltage(self, voltage: float) -> None:
         if voltage == self._voltage:
             return
         self._voltage = voltage
-        print(f'please set HV to {voltage:0.2f}V')
+        print(f'please set {self.name} to {voltage:0.2f}V')
         input('press enter to continue')
     
     def shutdown(self) -> None:
@@ -59,15 +60,17 @@ class Keithley2400VoltageChannel(VoltageChannel):
             if abs(voltage - voltage_readback) < 0.1:
                 break
         else:
-            raise RuntimeError(f'SMU voltage difference too large ({self.smu.voltage} V / {voltage} V)')
+            # raise RuntimeError(f'SMU voltage difference too large ({self.smu.voltage} V / {voltage} V)')
+            pass
     
     def shutdown(self) -> None:
         self.smu.shutdown()
 
-def open_voltage_channel(name: str, board_config: ReadoutBoardConfig) -> VoltageChannel:
-    if name == 'manual':
-        return ManualVoltageChannel()
-    if name == 'keithley2400':
-        return Keithley2400VoltageChannel(board_config.hv_smu_serial_port)
+def open_voltage_channel(driver: str, board_config: ReadoutBoardConfig, name: str) -> VoltageChannel:
+    if driver.startswith('manual'):
+        return ManualVoltageChannel(name)
+    if driver.startswith('keithley2400:'):
+        _, _, port = driver.partition(':')
+        return Keithley2400VoltageChannel(port)
     else:
-        raise ValueError(f'unknown voltage channel type: {name}')
+        raise ValueError(f'unknown voltage channel type: {driver}')
