@@ -1,11 +1,7 @@
-import dataclasses
 import h5py
 from dataclasses import dataclass
-from h5py._hl import group
 import numpy as np
-from typing import Any, SupportsIndex, cast
 
-from numpy.lib.index_tricks import nd_grid
 
 @dataclass
 class ParameterScan:
@@ -101,8 +97,6 @@ def apply_set(param_dict: dict, args_set: list[str]) -> None:
     for p_set in args_set:
         name, _, value = map(str.strip, p_set.partition('='))
         try:
-            ptype = eval(f'type({name})', param_dict)
-            value = ptype(value)
-            exec(f'{name} = {value}', param_dict)
+            exec(f'{name} = type({name})({value})', param_dict)
         except NameError:
             exec(f'{name} = {value}', param_dict)
