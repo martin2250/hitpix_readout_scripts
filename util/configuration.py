@@ -8,13 +8,13 @@ import pathlib
 class ReadoutBoardConfig:
     fastreadout_serial_number: str
     default_hv_driver: str
-    hv_smu_serial_port: str
 
 @dataclass
 class HitpixReadoutConfig:
     serial_baud: int
     boards: dict[str, ReadoutBoardConfig] # key = serial port name
     fpga_flash_command: Optional[str] = None
+    telegram: Optional[tuple[str, str]] = None # token and chatid
 
     def find_board(self) -> tuple[str, ReadoutBoardConfig]:
         for portname, config in self.boards.items():
@@ -41,9 +41,14 @@ def load_config() -> HitpixReadoutConfig:
         exit()
     # read config file
     config.read(os.path.expanduser(config_path))
+    default = config['DEFAULT']
     # parse DEFAULT
-    fpga_flash_command = config['DEFAULT'].get('fpga_flash_command')
-    serial_baud = int(config['DEFAULT']['serial_baud'])
+    fpga_flash_command = default.get('fpga_flash_command')
+    telegram = None
+    # TODO: move telegram to own section
+    if 'telegram_token' in config:
+        telegram = default['telegram_token'], default['telegram_chatid']
+    serial_baud = int(default['serial_baud'])
     # parse boards
     boards = {}
     for section in config.sections():
@@ -52,11 +57,11 @@ def load_config() -> HitpixReadoutConfig:
         conf_section = config[section]
         fastreadout_serial = conf_section.get('fastreadout_serial')
         default_hv_driver = conf_section.get('default_hv_driver', 'manual')
-        hv_smu_serial_port = conf_section.get('hv_smu_serial_port')
-        boards[section] = ReadoutBoardConfig(fastreadout_serial, default_hv_driver, hv_smu_serial_port)
+        boards[section] = ReadoutBoardConfig(fastreadout_serial, default_hv_driver)
 
     return HitpixReadoutConfig(
         serial_baud=serial_baud,
         boards=boards,
         fpga_flash_command=fpga_flash_command,
+        telegram=telegram,
     )
