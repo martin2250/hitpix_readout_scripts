@@ -102,7 +102,7 @@ class HMP4040VoltageChannel(VoltageChannel):
         if voltage > self.max_voltage:
             raise ValueError(f'HMP4040 {self.name} {voltage=} > {self.max_voltage=}')
         self.device.write(f'INST:NSEL {self.channel}')
-        self.device.write(f'VOLT {voltage}')
+        self.device.write(f'VOLT {voltage:0.3f}')
         time.sleep(0.5)
     
     def shutdown(self) -> None:
