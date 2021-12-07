@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import time
-
-from util.configuration import ReadoutBoardConfig
+import json
+from typing import ClassVar
 
 class VoltageChannel(ABC):
     @abstractmethod
@@ -13,7 +13,7 @@ class VoltageChannel(ABC):
         raise NotImplementedError()
 
 class ManualVoltageChannel(VoltageChannel):
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, _: dict) -> None:
         self._voltage = float('nan')
         self.name = name
     
@@ -30,13 +30,14 @@ class ManualVoltageChannel(VoltageChannel):
 class Keithley2400VoltageChannel(VoltageChannel):
     # Keithley Menu -> Communication
     # Baud: 9600, Termination: CR+LF
-    def __init__(self, serial_port: str, invert=True) -> None:
+    def __init__(self, name: str, config: dict) -> None:
         super().__init__()
-        self.invert = invert
+        self.invert = config['invert']
+        self.name = name
         self._voltage = float('nan')
         from pymeasure.instruments.keithley import Keithley2400
         from util.serial_adapter import SerialAdapter
-        a = SerialAdapter(serial_port, baudrate=9600)
+        a = SerialAdapter(config['serial_port'], baudrate=9600)
         self.smu = Keithley2400(a)
         self.smu.shutdown()
         self.smu.reset()
@@ -66,11 +67,58 @@ class Keithley2400VoltageChannel(VoltageChannel):
     def shutdown(self) -> None:
         self.smu.shutdown()
 
-def open_voltage_channel(driver: str, board_config: ReadoutBoardConfig, name: str) -> VoltageChannel:
-    if driver.startswith('manual'):
-        return ManualVoltageChannel(name)
-    if driver.startswith('keithley2400:'):
-        _, _, port = driver.partition(':')
-        return Keithley2400VoltageChannel(port)
-    else:
-        raise ValueError(f'unknown voltage channel type: {driver}')
+class HMP4040:
+    devices: ClassVar[dict[str, 'HMP4040']] = {}
+
+    def __init__(self, port: str):
+        import serial
+        self.serial = serial.Serial(port, 50, serial.FIVEBITS, timeout=1, xonxoff=True)
+    
+    def write(self, x: str) -> None:
+        self.serial.write((x + '\n').encode())
+        self.serial.flushOutput()
+    
+    def read(self) -> str:
+        return self.serial.readline().decode()
+
+class HMP4040VoltageChannel(VoltageChannel):
+    def __init__(self, name: str, config: dict) -> None:
+        assert config['channel'] in range(1, 5)
+        self.name = name
+        self.channel: int = config['channel']
+        self.max_voltage: float = config['max_voltage']
+        serial_port: str = config['serial_port']
+        self._voltage = float('nan')
+
+        if serial_port in HMP4040.devices:
+            self.device = HMP4040.devices[serial_port]
+        else:
+            self.device = HMP4040(serial_port)
+            HMP4040.devices[serial_port] = self.device
+
+    def set_voltage(self, voltage: float) -> None:
+        if voltage == self._voltage:
+            return
+        if voltage > self.max_voltage:
+            raise ValueError(f'HMP4040 {self.name} {voltage=} > {self.max_voltage=}')
+        self.device.write(f'INST:NSEL {self.channel}')
+        self.device.write(f'VOLT {voltage}')
+        time.sleep(0.5)
+    
+    def shutdown(self) -> None:
+        pass
+
+voltage_channels = {
+    'manual': ManualVoltageChannel,
+    'keithley2400': Keithley2400VoltageChannel,
+    'hmp4040': HMP4040VoltageChannel,
+}
+
+def open_voltage_channel(driver: str, name: str) -> VoltageChannel:
+    config = {}
+    if ':' in driver:
+        driver, _, cjson = driver.partition(':')
+        config = json.loads(cjson)
+    if not driver in voltage_channels:
+        raise ValueError(f'unknown voltage channel driver: {driver}')
+    return voltage_channels[driver](name, config)

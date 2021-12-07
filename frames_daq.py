@@ -95,9 +95,15 @@ def main(
     if hv_driver == 'default':
         hv_driver = board.default_hv_driver
 
-    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, board, 'HV')
-    vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, board, 'VDD')
-    vssa_channel = util.voltage_channel.open_voltage_channel(vssa_driver, board, 'VSSA')
+    if vdd_driver == 'default':
+        vdd_driver = board.default_vdd_driver
+
+    if vssa_driver == 'default':
+        vssa_driver = board.default_vssa_driver
+
+    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, 'HV')
+    vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, 'VDD')
+    vssa_channel = util.voltage_channel.open_voltage_channel(vssa_driver, 'VSSA')
 
     def set_voltages(config: FrameConfig):
         hv_channel.set_voltage(config.voltage_hv)
@@ -224,7 +230,21 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--hv_driver',
-        choices=('default', 'manual', 'keithley2400'),
+        choices=('default', 'manual'),
+        default='default',
+        help='use SMU interface to set HV',
+    )
+
+    parser.add_argument(
+        '--vssa_driver',
+        choices=('default', 'manual'),
+        default='default',
+        help='use SMU interface to set HV',
+    )
+
+    parser.add_argument(
+        '--vdd_driver',
+        choices=('default', 'manual'),
         default='default',
         help='use SMU interface to set HV',
     )
@@ -278,6 +298,8 @@ if __name__ == '__main__':
         args_set=args.set or [],
         read_adders=args.adders,
         hv_driver=args.hv_driver,
+        vssa_driver=args.vssa_driver,
+        vdd_driver=args.vdd_driver,
         file_continue=args.file_continue,
         sums_only=args.sums_only,
     )
