@@ -159,8 +159,8 @@ if __name__ == '__main__':
         ))
 
     # data ranges
-    threshold_clean = threshold[np.isfinite(threshold)]
-    noise_clean = noise[np.isfinite(noise)]
+    threshold_clean = threshold[np.isfinite(threshold) & (threshold > -0.5) & (threshold < 2)]
+    noise_clean = noise[np.isfinite(noise) & (noise > 0) & (noise < 1000)]
 
     range_threshold = np.min(threshold_clean), np.max(threshold_clean)
     range_noise = np.min(noise_clean), np.max(noise_clean)
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     line_data, = ax_curve.plot(
         config.injection_voltage, config.injection_voltage, 'x')
     line_fit, = ax_curve.plot(x_fit, x_fit, 'r')
-    ax_curve.set_ylim(0, 1)
+    ax_curve.set_ylim(0, 1.05)
     ax_curve.set_xlabel('Injection Voltage (V)')
     ax_curve.set_ylabel('Efficiency')
 
