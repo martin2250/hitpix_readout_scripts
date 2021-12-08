@@ -22,15 +22,16 @@ def fitfunc_sigmoid_inv(x, threshold, noise):
 
 def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[float, float]:
     # check inputs
-    assert len(efficiency.shape) == 1
-    if injection_voltage.shape != efficiency.shape:
-        print(injection_voltage.shape, efficiency.shape)
+    assert efficiency.ndim == 1
     assert injection_voltage.shape == efficiency.shape
+    pixel_10p = int(0.1 * efficiency.size) # 10 percent of pixels
     # check for dead / noisy pixels
-    if sum(efficiency > 0.3) == 0:  # dead
+    if sum(efficiency > 0.3) <= pixel_10p:  # dead
         return np.inf, np.nan
-    if sum(efficiency < 0.7) == 0:  # noisy
+    if sum(efficiency < 0.7) <= pixel_10p:  # noisy
         return -np.inf, np.nan
+    if sum(efficiency > 1.1) > pixel_10p:  # probably oscillating
+        return np.nan, np.nan
     # get starting values
     i_threshold = np.argmax(
         efficiency > 0.5*(np.min(efficiency) + np.max(efficiency)))
