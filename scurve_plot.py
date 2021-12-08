@@ -68,18 +68,15 @@ if __name__ == '__main__':
         config, hits_signal_first, _ = scurve.io.load_scurve(group_scurve)
         # create full data array
         hits_signal = np.zeros(scan_shape + hits_signal_first.shape)
-        # store first scurve
-        hits_signal[tuple(0 for _ in scan_shape) + (...,)] = hits_signal_first
         # store remaining scurves
         for idx in np.ndindex(*scan_shape):
-            # do not load zeroth scurve again
-            if not any(idx):
-                continue
             group_name = 'scurve_' + '_'.join(str(i) for i in idx)
             group_scurve = file[group_name]
             assert isinstance(group_scurve, h5py.Group)
-            _, hits_signal_group, _ = scurve.io.load_scurve(group_scurve)
+            _, hits_signal_group, hits_noise_group = scurve.io.load_scurve(group_scurve)
             hits_signal[idx] = hits_signal_group
+            if hits_noise_group is not None:
+                hits_signal[idx] -= hits_noise_group
 
     ################################################################################
 
