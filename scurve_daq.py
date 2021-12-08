@@ -2,6 +2,11 @@
 import argparse
 from typing import Literal
 
+def __get_config_dict_ext() -> dict:
+    return {
+        'pulse_us': 2.5,
+        'pause_us': 7.5,
+    }
 
 def main(
     output_file: str,
@@ -40,6 +45,7 @@ def main(
         'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
+    config_dict_template.update(**__get_config_dict_ext())
 
     ############################################################################
 
@@ -53,6 +59,8 @@ def main(
             injection_voltage=injection_voltage,
             injections_per_round=injections_per_round,
             injections_total=injections_total,
+            injection_pulse_us=scan_dict['pulse_us'],
+            injection_pause_us=scan_dict['pause_us'],
         )
 
     ############################################################################
@@ -226,6 +234,8 @@ if __name__ == '__main__':
         for name, value in hitpix.defaults.dac_default_hitpix1.items():
             choices_set.append(f'dac.{name}={value}')
         for name, value in hitpix.defaults.voltages_default.items():
+            choices_set.append(f'{name}={value}')
+        for name, value in __get_config_dict_ext().items():
             choices_set.append(f'{name}={value}')
         choices_scan = [value + ':' for value in choices_set]
         setattr(a_set, 'completer', ChoicesCompleter(choices_set))

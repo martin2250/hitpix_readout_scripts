@@ -19,7 +19,9 @@ class SCurveConfig:
     voltage_threshold: float
     voltage_vdd: float
     voltage_vssa: float
-    shift_clk_div: int = 1
+    injection_pulse_us: float
+    injection_pause_us: float
+    shift_clk_div: int = 0
     injection_delay: float = 0.01  # DACs needs around 3ms
 
     def asdict(self) -> dict:
@@ -34,10 +36,10 @@ class SCurveConfig:
         del d['dac_cfg']
         injection_voltage = np.array(d['injection_voltage'])
         del d['injection_voltage']
-        if not 'voltage_vdd' in d:
-            d['voltage_vdd'] = -1
-        if not 'voltage_vssa' in d:
-            d['voltage_vssa'] = -1
+        # legacy data
+        for key in ['injection_pause_us', 'injection_pulse_us', 'voltage_vssa', 'voltage_vdd']:
+            if not key in d:
+                d[key] = -1
         return SCurveConfig(
             dac_cfg=dac_cfg,
             injection_voltage=injection_voltage,
