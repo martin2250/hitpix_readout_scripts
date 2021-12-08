@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from typing import Literal
 
 
 def main(
@@ -10,6 +11,7 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     read_noise: bool,
+    file_exists: Literal['delete', 'continue', 'exit', 'ask'],
     vdd_driver: str = 'manual',
     vssa_driver: str = 'manual',
 ):
@@ -57,11 +59,16 @@ def main(
 
     path_output = Path(output_file)
     if path_output.exists():
-        res = input(
-            f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
-        if res.lower() == 'd':
+        if file_exists == 'ask':
+            res = input(
+                f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+            if res.lower() == 'd':
+                path_output.unlink()
+            elif res.lower() != 'c':
+                exit()
+        elif file_exists == 'delete':
             path_output.unlink()
-        elif res.lower() != 'c':
+        elif file_exists != 'continue':
             exit()
 
     ############################################################################
@@ -118,6 +125,7 @@ def main(
                 util.gridscan.apply_set(config_dict, args_set)
                 # extract all values
                 config = config_from_dict(config_dict)
+                set_voltages(config)
                 # perform measurement
                 prog_meas.reset()
                
@@ -202,6 +210,13 @@ if __name__ == '__main__':
         help='use SMU interface to set HV',
     )
 
+    parser.add_argument(
+        '--exists',
+        choices=('delete', 'continue', 'exit', 'ask'),
+        default='ask',
+        help='what to do when file exists',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
@@ -230,6 +245,7 @@ if __name__ == '__main__':
         args_scan=args.scan or [],
         args_set=args.set or [],
         read_noise=args.read_noise,
+        file_exists=args.exists,
         vssa_driver=args.vssa_driver,
         vdd_driver=args.vdd_driver,
     )
