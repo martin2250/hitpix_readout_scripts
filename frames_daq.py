@@ -4,8 +4,6 @@ import argparse
 
 def __get_config_dict_ext() -> dict:
     return {
-        'vssa': 1.25,
-        'vdd': 1.85,
         'frame_us': 5000.0,
         'pause_us': 0.0,
         'hv': 5.0,
@@ -24,6 +22,7 @@ def main(
     vdd_driver: str = 'manual',
     vssa_driver: str = 'manual',
 ):
+    import atexit
     import copy
     import time
     from pathlib import Path
@@ -110,96 +109,63 @@ def main(
         vdd_channel.set_voltage(config.voltage_vdd)
         vssa_channel.set_voltage(config.voltage_vssa)
 
+    atexit.register(fastreadout.close)
+    atexit.register(hv_channel.shutdown)
+
     ############################################################################
 
-    retcode = 0
-
-    try:
-        if scan_parameters:
-            with h5py.File(path_output, 'a') as file:
-                # save scan parameters first
-                group_scan = file.require_group('scan')
-                util.gridscan.save_scan(group_scan, scan_parameters)
-                # nested progress bars
-                prog_scan = tqdm.tqdm(total=np.product(scan_shape))
-                prog_meas = tqdm.tqdm(leave=None)
-                # scan over all possible combinations
-                for idx in np.ndindex(*scan_shape):
-                    # check if this measurement is already present in file
-                    group_name = 'frames_' + '_'.join(str(i) for i in idx)
-                    if group_name in file:
-                        # skip
-                        prog_scan.update()
-                        continue
-                    # apply scan and set
-                    config_dict = copy.deepcopy(config_dict_template)
-                    util.gridscan.apply_scan(config_dict, scan_parameters, idx)
-                    util.gridscan.apply_set(config_dict, args_set)
-                    # extract all values
-                    config = config_from_dict(config_dict)
-                    set_voltages(config)
-                    # perform measurement
-                    for _ in range(3):
-                        prog_meas.reset()
-                        try:
-                            ro.sm_abort()
-                            frames, times = read_frames(
-                                ro, fastreadout, config, prog_meas)
-                            
-                            if sums_only:
-                                shape_new = (1, *frames.shape[1:])
-                                frames = frames.sum(axis=0).reshape(*shape_new)
-                                times = times[:1]
-                            # store measurement
-                            group = file.create_group(group_name)
-                            save_frames(group, config, frames, times)
-                            prog_scan.update()
-                            break
-                        except KeyboardInterrupt:
-                            raise KeyboardInterrupt()
-                        except Exception as e:
-                            raise e
-                            import traceback
-                            prog_scan.write(f'Exception: {repr(e)}')
-                            prog_scan.write(traceback.format_exc())
-                            prog_scan.write('stopping readout')
-                            # restart readout on failure
-                            ro.sm_abort()
-                            ro.close()
-                            fastreadout.close()
-                            time.sleep(1)
-                            prog_scan.write('restarting readout')
-                            ro = HitPix1Readout(serial_port_name)
-                            ro.wait_sm_idle()
-                            ro.initialize()
-                            fastreadout = FastReadout(
-                                board.fastreadout_serial_number)
-                            prog_scan.write('-----------')
-                    else:
-                        raise Exception('too many retries')
-
-        else:
-            util.gridscan.apply_set(config_dict_template, args_set)
-            config = config_from_dict(config_dict_template)
-            set_voltages(config)
-
-            frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
-
-            if sums_only:
-                shape_new = (1, *frames.shape[1:])
-                frames = frames.sum(axis=0).reshape(*shape_new)
-                times = times[:1]
-
-            with h5py.File(path_output, 'w') as file:
-                group = file.create_group('frames')
+    if scan_parameters:
+        with h5py.File(path_output, 'a') as file:
+            # save scan parameters first
+            group_scan = file.require_group('scan')
+            util.gridscan.save_scan(group_scan, scan_parameters)
+            # nested progress bars
+            prog_scan = tqdm.tqdm(total=np.product(scan_shape))
+            prog_meas = tqdm.tqdm(leave=None)
+            # scan over all possible combinations
+            for idx in np.ndindex(*scan_shape):
+                # check if this measurement is already present in file
+                group_name = 'frames_' + '_'.join(str(i) for i in idx)
+                if group_name in file:
+                    # skip
+                    prog_scan.update()
+                    continue
+                # apply scan and set
+                config_dict = copy.deepcopy(config_dict_template)
+                util.gridscan.apply_scan(config_dict, scan_parameters, idx)
+                util.gridscan.apply_set(config_dict, args_set)
+                # extract all values
+                config = config_from_dict(config_dict)
+                set_voltages(config)
+                # perform measurement
+                prog_meas.reset()
+                ro.sm_abort()
+                frames, times = read_frames(
+                    ro, fastreadout, config, prog_meas)
+                # sums -> sum up all frames
+                if sums_only:
+                    shape_new = (1, *frames.shape[1:])
+                    frames = frames.sum(axis=0).reshape(*shape_new)
+                    times = times[:1]
+                # store measurement
+                group = file.create_group(group_name)
                 save_frames(group, config, frames, times)
-    except BaseException as e:
-        raise e
-        retcode = 1
-    finally:
-        fastreadout.close()
-        hv_channel.shutdown()
-    exit(retcode)
+                prog_scan.update()
+    else:
+        util.gridscan.apply_set(config_dict_template, args_set)
+        config = config_from_dict(config_dict_template)
+        set_voltages(config)
+
+        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
+
+        if sums_only:
+            shape_new = (1, *frames.shape[1:])
+            frames = frames.sum(axis=0).reshape(*shape_new)
+            times = times[:1]
+
+        with h5py.File(path_output, 'w') as file:
+            group = file.create_group('frames')
+            save_frames(group, config, frames, times)
 
 
 if __name__ == '__main__':

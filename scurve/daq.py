@@ -16,8 +16,8 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     ############################################################################
     # configure readout & chip
 
-    # 250 ns negative pulse with 4µs pause
-    ro.set_injection_ctrl(50, 800)
+    # 2.5µs negative pulse with 7.5µs pause
+    ro.set_injection_ctrl(500, 1500)
 
     ro.set_treshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)

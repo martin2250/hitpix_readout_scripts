@@ -2,7 +2,7 @@ dac_default_hitpix1 = {
     'blres':  63,
     'vn1':    30,
     'vnfb':   63,
-    'vnfoll': 4,
+    'vnfoll': 2,
     'vndell': 8,
     'vn2':    0,
     'vnbias': 4,
@@ -14,4 +14,6 @@ dac_default_hitpix1 = {
 voltages_default = {
     'threshold': 1.2,
     'baseline': 1.1,
+    'vssa': 1.25,
+    'vdd': 1.85,
 }

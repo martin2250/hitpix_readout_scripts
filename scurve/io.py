@@ -51,7 +51,7 @@ def save_scurve(h5group: h5py.Group, config: SCurveConfig, hits_signal: np.ndarr
     h5group.attrs['config'] = json.dumps(config.asdict())
     # data
     h5group.create_dataset('hits_signal', data=hits_signal, compression='gzip')
-    if hits_noise:
+    if hits_noise is not None:
         h5group.create_dataset('hits_noise', data=hits_noise, compression='gzip')
 
 
