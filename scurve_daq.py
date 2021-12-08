@@ -202,9 +202,9 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--read_noise',
+        '--no_noise',
         action='store_true',
-        help='also read noise hits, inject into half row at a time',
+        help='do not read noise hits, inject into entire row at a time',
     )
 
     parser.add_argument(
@@ -257,7 +257,7 @@ if __name__ == '__main__':
         injections_per_round=args.injections[1],
         args_scan=args.scan or [],
         args_set=args.set or [],
-        read_noise=args.read_noise,
+        read_noise=not args.no_noise,
         file_exists=args.exists,
         vssa_driver=args.vssa_driver,
         vdd_driver=args.vdd_driver,

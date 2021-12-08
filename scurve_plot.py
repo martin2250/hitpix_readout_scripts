@@ -68,15 +68,16 @@ if __name__ == '__main__':
         config, hits_signal_first, _ = scurve.io.load_scurve(group_scurve)
         # create full data array
         hits_signal = np.zeros(scan_shape + hits_signal_first.shape)
+        hits_noise = np.zeros(scan_shape + hits_signal_first.shape)
         # store remaining scurves
         for idx in np.ndindex(*scan_shape):
-            group_name = 'scurve_' + '_'.join(str(i) for i in idx)
+            group_name = 'scurve' + ''.join(f'_{i}' for i in idx)
             group_scurve = file[group_name]
             assert isinstance(group_scurve, h5py.Group)
             _, hits_signal_group, hits_noise_group = scurve.io.load_scurve(group_scurve)
             hits_signal[idx] = hits_signal_group
             if hits_noise_group is not None:
-                hits_signal[idx] -= hits_noise_group
+                hits_noise[idx] = hits_noise_group
 
     ################################################################################
 
@@ -213,6 +214,14 @@ if __name__ == '__main__':
     ax_curve.set_xlabel('Injection Voltage (V)')
     ax_curve.set_ylabel('Efficiency')
 
+    ax_curve_noise = ax_curve.twinx()
+    ax_curve_noise.set_ylabel('Noise Hits')
+    line_noise, = ax_curve_noise.plot(
+        config.injection_voltage,
+        config.injection_voltage,
+        'r+',
+    )
+
     def redraw_curve():
         y_fit = scurve.analysis.fitfunc_sigmoid(
             x_fit,
@@ -221,6 +230,13 @@ if __name__ == '__main__':
         )
         line_data.set_ydata(efficiency[idx_scan+(...,)+idx_pixel])
         line_fit.set_ydata(y_fit)
+        data_noise = hits_noise[idx_scan+(...,)+idx_pixel]
+        data_noise = np.where(data_noise < 1, np.nan, data_noise)
+        line_noise.set_ydata(data_noise)
+        noise_max = np.max(data_noise)
+        if not np.isfinite(noise_max):
+            noise_max = 1
+        ax_curve_noise.set_ylim(0, noise_max)
     redraw_curve()
 
     # add change handler
