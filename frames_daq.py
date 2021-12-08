@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from typing import Literal
 
 
 def __get_config_dict_ext() -> dict:
@@ -16,7 +17,7 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     read_adders: bool,
-    file_continue: bool,
+    file_exists: Literal['delete', 'continue', 'exit', 'ask'],
     sums_only: bool,
     hv_driver: str = 'manual',
     vdd_driver: str = 'manual',
@@ -70,13 +71,20 @@ def main(
 
     path_output = Path(output_file)
     if path_output.exists():
-        if not file_continue:
-            res = input(
-                f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+        if file_exists == 'ask':
+            try:
+                res = input(
+                    f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+            except KeyboardInterrupt:
+                exit()
             if res.lower() == 'd':
                 path_output.unlink()
             elif res.lower() != 'c':
                 exit()
+        elif file_exists == 'delete':
+            path_output.unlink()
+        elif file_exists != 'continue':
+            exit()
 
     ############################################################################
     # open readout
@@ -223,16 +231,16 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--continue',
-        dest='file_continue',
-        action='store_true',
-        help='when file exists, continue measurement',
-    )
-
-    parser.add_argument(
         '--sums_only',
         action='store_true',
         help='sum up all frames instead of saving individual frames',
+    )
+
+    parser.add_argument(
+        '--exists',
+        choices=('delete', 'continue', 'exit', 'ask'),
+        default='ask',
+        help='what to do when file exists',
     )
 
     try:
@@ -266,6 +274,6 @@ if __name__ == '__main__':
         hv_driver=args.hv_driver,
         vssa_driver=args.vssa_driver,
         vdd_driver=args.vdd_driver,
-        file_continue=args.file_continue,
+        file_exists=args.exists,
         sums_only=args.sums_only,
     )

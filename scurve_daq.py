@@ -68,8 +68,11 @@ def main(
     path_output = Path(output_file)
     if path_output.exists():
         if file_exists == 'ask':
-            res = input(
-                f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+            try:
+                res = input(
+                    f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
+            except KeyboardInterrupt:
+                exit()
             if res.lower() == 'd':
                 path_output.unlink()
             elif res.lower() != 'c':
