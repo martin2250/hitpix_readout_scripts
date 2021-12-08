@@ -25,9 +25,9 @@ def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[
     assert efficiency.ndim == 1
     assert injection_voltage.shape == efficiency.shape
     # check for dead / noisy pixels
-    if sum(efficiency > 0.3) < 2:  # dead
+    if sum(efficiency < 0.2) < 2:  # dead
         return np.inf, np.nan
-    if sum(efficiency < 0.7) < 2:  # noisy
+    if sum(efficiency > 0.8) < 2:  # noisy
         return -np.inf, np.nan
     if sum(efficiency > 1.1) > int(0.7 * efficiency.size):  # probably oscillating
         return np.nan, np.nan
