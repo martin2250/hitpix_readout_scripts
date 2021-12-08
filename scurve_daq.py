@@ -10,6 +10,8 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     read_noise: bool,
+    vdd_driver: str = 'manual',
+    vssa_driver: str = 'manual',
 ):
     import copy
     import time
@@ -22,6 +24,7 @@ def main(
     import hitpix.defaults
     import util.configuration
     import util.gridscan
+    import util.voltage_channel
     from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
     from scurve.daq import measure_scurves
@@ -32,6 +35,8 @@ def main(
 
     config_dict_template = {
         'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'vssa': 1.25,
+        'vdd': 1.85,
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
 
@@ -42,6 +47,8 @@ def main(
             voltage_baseline=scan_dict['baseline'],
             voltage_threshold=scan_dict['threshold'],
             dac_cfg=scan_dict['dac'],
+            voltage_vdd=config_dict['vdd'],
+            voltage_vssa=config_dict['vssa'],
             injection_voltage=injection_voltage,
             injections_per_round=injections_per_round,
             injections_total=injections_total,
@@ -68,6 +75,22 @@ def main(
     time.sleep(0.05)
     ro = HitPix1Readout(serial_port_name)
     ro.initialize()
+
+    ############################################################################
+
+    if vdd_driver == 'default':
+        vdd_driver = board.default_vdd_driver
+
+    if vssa_driver == 'default':
+        vssa_driver = board.default_vssa_driver
+
+    vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, 'VDD')
+    vssa_channel = util.voltage_channel.open_voltage_channel(
+        vssa_driver, 'VSSA')
+
+    def set_voltages(config: SCurveConfig):
+        vdd_channel.set_voltage(config.voltage_vdd)
+        vssa_channel.set_voltage(config.voltage_vssa)
 
     ############################################################################
 
@@ -120,7 +143,8 @@ def main(
             util.gridscan.apply_set(config_dict_template, args_set)
             config = config_from_dict(config_dict_template)
 
-            res = measure_scurves(ro, fastreadout, config, read_noise, tqdm.tqdm())
+            res = measure_scurves(ro, fastreadout, config,
+                                  read_noise, tqdm.tqdm())
 
             with h5py.File(path_output, 'w') as file:
                 group = file.create_group('scurve')
@@ -178,6 +202,20 @@ if __name__ == '__main__':
         help='also read noise hits, inject into half row at a time',
     )
 
+    parser.add_argument(
+        '--vssa_driver',
+        choices=('default', 'manual'),
+        default='default',
+        help='use SMU interface to set HV',
+    )
+
+    parser.add_argument(
+        '--vdd_driver',
+        choices=('default', 'manual'),
+        default='default',
+        help='use SMU interface to set HV',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
@@ -206,4 +244,6 @@ if __name__ == '__main__':
         args_scan=args.scan or [],
         args_set=args.set or [],
         read_noise=args.read_noise,
+        vssa_driver=args.vssa_driver,
+        vdd_driver=args.vdd_driver,
     )

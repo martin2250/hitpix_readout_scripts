@@ -73,6 +73,7 @@ class HMP4040:
     def __init__(self, port: str):
         import serial
         self.serial = serial.Serial(port, 50, serial.FIVEBITS, timeout=1, xonxoff=True)
+        self.write('')
     
     def write(self, x: str) -> None:
         self.serial.write((x + '\n').encode())
