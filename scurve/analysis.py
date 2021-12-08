@@ -2,6 +2,7 @@ from typing import Any, cast
 
 import numpy as np
 import scipy.optimize
+import scipy.special
 
 ################################################################################
 # sigmoid curve fitting
@@ -9,14 +10,14 @@ import scipy.optimize
 
 def fitfunc_sigmoid(x, threshold, noise):
     e = (x - threshold) / noise
-    return 1 / (1 + np.exp(-e))
+    return scipy.special.expit(e)
 
 # sigmoid with inverse noise -> speed up fit
 
 
 def fitfunc_sigmoid_inv(x, threshold, noise):
     e = (x - threshold) * noise
-    return 1 / (1 + np.exp(-e))
+    return scipy.special.expit(e)
 
 
 def fit_sigmoid(injection_voltage: np.ndarray, efficiency: np.ndarray) -> tuple[float, float]:
