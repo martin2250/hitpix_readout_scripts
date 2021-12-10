@@ -110,3 +110,24 @@ def prog_dac_config(cfg_dac_bin: bitarray.bitarray, shift_clk_div: int = 7) -> l
         Sleep(100),
         cfg_int,
     ]
+
+def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7) -> list[Instruction]:
+    cfg_int = SetCfg(
+        shift_rx_invert = True, # rx not used
+        shift_tx_invert = True,
+        shift_toggle = True,
+        shift_select_dac = False,
+        shift_word_len = 31, # rx not used
+        shift_clk_div = shift_clk_div,
+        pins = 0,
+    )
+    return [
+        cfg_int,
+        Reset(True, True),
+        Sleep(50),
+        *prog_shift_dense(cfg_col_bin, False),
+        Sleep(50),
+        cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+        Sleep(50),
+        cfg_int,
+    ]
