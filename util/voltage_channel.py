@@ -5,7 +5,7 @@ from typing import ClassVar
 
 class VoltageChannel(ABC):
     @abstractmethod
-    def set_voltage(self, voltage: float) -> None:
+    def set_voltage(self, voltage: float) -> bool:
         raise NotImplementedError()
 
     @abstractmethod
@@ -17,12 +17,13 @@ class ManualVoltageChannel(VoltageChannel):
         self._voltage = float('nan')
         self.name = name
     
-    def set_voltage(self, voltage: float) -> None:
+    def set_voltage(self, voltage: float) -> bool:
         if voltage == self._voltage:
-            return
+            return False
         self._voltage = voltage
         print(f'please set {self.name} to {voltage:0.2f}V')
         input('press enter to continue')
+        return True
     
     def shutdown(self) -> None:
         pass
@@ -46,11 +47,11 @@ class Keithley2400VoltageChannel(VoltageChannel):
         self.smu.measure_voltage()
         self.smu.auto_range_source()
     
-    def set_voltage(self, voltage: float) -> None:
+    def set_voltage(self, voltage: float) -> bool:
         if self.invert:
             voltage = -voltage
         if voltage == self._voltage:
-            return
+            return False
         self._voltage = voltage
         # send to SMU
         self.smu.source_voltage = voltage
@@ -63,6 +64,7 @@ class Keithley2400VoltageChannel(VoltageChannel):
         else:
             # raise RuntimeError(f'SMU voltage difference too large ({self.smu.voltage} V / {voltage} V)')
             pass
+        return True
     
     def shutdown(self) -> None:
         self.smu.shutdown()
@@ -97,14 +99,15 @@ class HMP4040VoltageChannel(VoltageChannel):
             self.device = HMP4040(serial_port)
             HMP4040.devices[serial_port] = self.device
 
-    def set_voltage(self, voltage: float) -> None:
+    def set_voltage(self, voltage: float) -> bool:
         if voltage == self._voltage:
-            return
+            return False
         if voltage > self.max_voltage:
             raise ValueError(f'HMP4040 {self.name} {voltage=} > {self.max_voltage=}')
+        self._voltage = voltage
         self.device.write(f'INST:NSEL {self.channel}')
         self.device.write(f'VOLT {voltage:0.3f}')
-        time.sleep(0.5)
+        return True
     
     def shutdown(self) -> None:
         pass
