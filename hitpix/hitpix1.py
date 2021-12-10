@@ -35,7 +35,7 @@ class HitPix1Readout(Readout):
 
         self.frequency_mhz = 200
     
-    def set_treshold_voltage(self, voltage: float) -> None:
+    def set_threshold_voltage(self, voltage: float) -> None:
         self.voltage_card.set_voltage(HitPix1VoltageCards.threshold, voltage)
     
     def set_baseline_voltage(self, voltage: float) -> None:

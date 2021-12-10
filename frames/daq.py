@@ -16,7 +16,7 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     ############################################################################
     # configure readout & chip
 
-    ro.set_treshold_voltage(config.voltage_threshold)
+    ro.set_threshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
     ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))

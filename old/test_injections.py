@@ -16,7 +16,7 @@ ro.initialize()
 
 ro.set_injection_ctrl(500, 500)
 
-ro.set_treshold_voltage(1.3)
+ro.set_threshold_voltage(1.3)
 ro.set_baseline_voltage(1.1)
 ro.set_injection_voltage(1.0)
 

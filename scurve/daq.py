@@ -22,7 +22,7 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
         int(config.injection_pause_us * ro.frequency_mhz),
     )
 
-    ro.set_treshold_voltage(config.voltage_threshold)
+    ro.set_threshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
     ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
