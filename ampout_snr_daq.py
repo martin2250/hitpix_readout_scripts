@@ -41,13 +41,13 @@ def main(
     import numpy as np
     import tqdm
 
-    import util.lecroy
+    import ampout_snr.daq
     import hitpix.defaults
     import util.configuration
     import util.gridscan
+    import util.lecroy
     import util.voltage_channel
-    from ampout_snr.io import AmpOutSnrConfig
-    import ampout_snr.daq
+    from ampout_snr.io import AmpOutSnrConfig, save_ampout_snr
     from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
     from readout.fast_readout import FastReadout
 
@@ -158,7 +158,7 @@ def main(
                 config = config_from_dict(config_dict)
                 set_voltages(config)
                 # perform measurement
-                y_data, time_offset, time_delta = ampout_snr.daq.read_ampout_snr(
+                res = ampout_snr.daq.read_ampout_snr(
                     ro,
                     scope=scope,
                     config=config,
@@ -167,17 +167,14 @@ def main(
                     no_readout=no_readout,
                 )
                 # store measurement
-                dset = file.create_dataset(dset_name, data = y_data)
-                dset.attrs['time_offset'] = time_offset
-                dset.attrs['time_delta'] = time_delta
-                # save_frames(group, config, frames, times)
+                save_ampout_snr(file, dset_name, config, *res)
                 prog_scan.update()
     else:
         util.gridscan.apply_set(config_dict_template, args_set)
         config = config_from_dict(config_dict_template)
         set_voltages(config)
 
-        y_data, time_offset, time_delta = ampout_snr.daq.read_ampout_snr(
+        res = ampout_snr.daq.read_ampout_snr(
             ro,
             scope=scope,
             config=config,
@@ -186,11 +183,9 @@ def main(
             no_readout=no_readout,
         )
 
+        # store measurement
         with h5py.File(path_output, 'w') as file:
-            # store measurement
-            dset = file.create_dataset('ampout_snr', data = y_data)
-            dset.attrs['time_offset'] = time_offset
-            dset.attrs['time_delta'] = time_delta
+            save_ampout_snr(file, 'ampout_snr', config, *res)
 
 
 if __name__ == '__main__':
