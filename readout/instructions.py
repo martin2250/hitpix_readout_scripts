@@ -23,7 +23,7 @@ class Inject(Instruction):
     injection_count: int
     
     def to_binary(self) -> int:
-        assert (self.injection_count - 1) in range(1 << 12)
+        assert (self.injection_count - 1) in range(1 << 16)
         instr_mask = 0b00010010 << 24
         instr_mask |= (self.injection_count - 1)
         return instr_mask

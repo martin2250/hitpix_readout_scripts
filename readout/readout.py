@@ -165,8 +165,8 @@ class Readout:
         return time_sync + counter_diff * 1e-6
     
     def set_injection_ctrl(self, on_cycles: int, off_cycles: int) -> None:
-        assert (on_cycles - 1) in range(1 << 12)
-        assert (off_cycles - 1) in range(1 << 12)
+        assert (on_cycles - 1) in range(1 << 16)
+        assert (off_cycles - 1) in range(1 << 16)
         self.write_register(self.ADDR_SM_INJECTION_CTRL, (on_cycles - 1) | ((off_cycles - 1) << 16))
     
     def _write_function_card_raw(self, data: bytes) -> None:
