@@ -38,7 +38,7 @@ class AmpOutSnrConfig:
 
 
 def save_ampout_snr(h5parent: h5py.Group, dset_name: str, config: AmpOutSnrConfig, y_data: np.ndarray, time_offset: float, time_delta: float):
-    dset = h5parent.create_dataset(dset_name, data=y_data, compression='gzip')
+    dset = h5parent.create_dataset(dset_name, data=y_data.astype(np.float32), compression='gzip')
     dset.attrs['time_offset'] = time_offset
     dset.attrs['time_delta'] = time_delta
     dset.attrs['save_time'] = datetime.datetime.now().isoformat()
@@ -49,7 +49,7 @@ def load_ampout_snr(h5parent: h5py.Group, dset_name: str) -> tuple[AmpOutSnrConf
     dset = h5parent[dset_name]
     assert isinstance(dset, h5py.Dataset)
     # load attributes
-    config_str = h5parent.attrs['config']
+    config_str = dset.attrs['config']
     assert isinstance(config_str, str)
     config = AmpOutSnrConfig.fromdict(json.loads(config_str))
     time_offset = dset.attrs['time_offset']
@@ -58,4 +58,7 @@ def load_ampout_snr(h5parent: h5py.Group, dset_name: str) -> tuple[AmpOutSnrConf
     assert isinstance(time_delta, float)
     y_data = dset[()]
     assert isinstance(y_data, np.ndarray)
+    # old data has scope channels in first dimension
+    if y_data.ndim == 3:
+        y_data = np.reshape(y_data, y_data.shape[1:])
     return config, y_data, time_offset, time_delta

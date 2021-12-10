@@ -50,4 +50,4 @@ def read_ampout_snr(
 
     y_data, _, time_offset, time_delta = scope.get_sequence_data([1])
 
-    return y_data, time_offset, time_delta
+    return y_data[0], time_offset, time_delta
