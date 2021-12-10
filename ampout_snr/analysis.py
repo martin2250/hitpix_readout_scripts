@@ -15,7 +15,7 @@ def fit_peak(wfm: np.ndarray) -> float:
     def parabola(x, a, x0, c):
         return a - c * np.square(x - x0)
 
-    popt, _ = scipy.optimize.curve_fit(
+    popt, *_ = scipy.optimize.curve_fit(
         f=parabola,
         xdata=x_fit,
         ydata=y_fit,
