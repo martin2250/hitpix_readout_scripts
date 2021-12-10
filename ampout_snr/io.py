@@ -17,7 +17,7 @@ class AmpOutSnrConfig:
     voltage_threshold: float
     voltage_vdd: float
     voltage_vssa: float
-    num_injections: int
+    inject_col: int
     injection_pulse_us: float
     injection_pause_us: float
     injection_volts: float
