@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 import argparse
 from typing import Any
-
+import tqdm
 import h5py
 from matplotlib.backend_bases import MouseEvent
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.widgets import Slider
-
-import frames.io
+import ampout_snr.analysis
+from ampout_snr.io import load_ampout_snr
 import util.gridscan
+from concurrent.futures import ProcessPoolExecutor
 
 ################################################################################
 
@@ -34,6 +35,7 @@ if __name__ == '__main__':
 
     ################################################################################
     # load data
+    pex = ProcessPoolExecutor()
 
     with h5py.File(args.input_file) as file:
         # get information about parameter scan
@@ -44,24 +46,96 @@ if __name__ == '__main__':
         else:
             scan_parameters, scan_shape = [], ()
 
-        # load first dataset to get data shape
-        # old data format used 'scurve' prefix
-        prefix = 'ampout_snr'
-        dset_snr = file[prefix + '_0' * len(scan_shape)]
-        assert isinstance(dset_snr, h5py.Dataset)
-        time_offset = dset_snr.attrs['time_offset']
-        time_delta = dset_snr.attrs['time_delta']
-        # create full data array
-        y_data = np.zeros(scan_shape + dset_snr.shape)
-        # store remaining scurves
-        for idx in np.ndindex(*scan_shape):
-            group_name = prefix + ''.join(f'_{i}' for i in idx)
-            dset_snr = file[group_name]
-            assert isinstance(dset_snr, h5py.Dataset)
-            y_data[idx] = dset_snr[()]
+        _, data_0, time_offset, time_delta = load_ampout_snr(
+            file,
+            'ampout_snr' + '_0' * len(scan_shape),
+        )
+        num_wfms = data_0.shape[0]
+        len_wfm = data_0.shape[1]
+        del data_0
 
-    ################################################################################
-    # calculate pixel properties
+        # use 80% of the trace leading up to the trigger event as baseline
+        cnt_baseline = int(0.8 * time_offset / time_delta)
+
+        def read_idx(idx: tuple[int, ...]) -> tuple[tuple[int, ...], np.ndarray]:
+            dset_name = 'ampout_snr' + ''.join(f'_{i}' for i in idx)
+            dset_snr = file[dset_name]
+            assert isinstance(dset_snr, h5py.Dataset)
+            data = dset_snr[()]
+            assert isinstance(data, np.ndarray)
+            if data.ndim == 3:
+                data = data.reshape(data.shape[1:])
+            results = np.zeros(data.shape[0])
+            # iterate over all waveforms and find baseline + peak
+            for i, wfm in enumerate(data):
+                assert isinstance(wfm, np.ndarray)
+                # baseline
+                baseline = np.mean(wfm[:cnt_baseline])
+                peak = ampout_snr.analysis.fit_peak(wfm)
+                results[i] = peak - baseline
+            return idx, results
+        
+        wfms_shape = scan_shape + (num_wfms,)
+        y_peak = np.zeros(wfms_shape)
+        
+        for idx, data in tqdm.tqdm(
+            pex.map(read_idx, np.ndindex(*scan_shape)),
+            total=np.prod(scan_shape),
+        ):
+            y_peak[idx] = data
+
+
+    for x in y_peak:
+        plt.hist(x, 30)
+        signal = np.mean(x)
+        noise = np.std(x)
+        print(f'{signal=}, {noise=} {signal/noise}')
+    plt.show()
+
+    # ################################################################################
+    # # calculate waveform properties
+    # wfms_shape = y_data.shape[:-1]
+
+    # y_peak = np.zeros(wfms_shape)
+    # y_baseline = np.zeros(wfms_shape)
+
+    # for val, idx in tqdm.tqdm(zip(
+    #     pex.map(ampout_snr.analysis.fit_curve, y_data.reshape(-1, y_data.shape[-1])),
+    #     np.ndindex(*wfms_shape),
+    #     )):
+    #     y_peak[idx] = val
+
+    # for idx in np.ndindex(*wfms_shape):
+    #     wfm = y_data[idx]
+    #     assert isinstance(wfm, np.ndarray)
+    #     i_max = np.argmax(wfm)
+    #     y_max = wfm[i_max]
+    #     y_cut = y_max * 0.9
+    #     i_right = np.argmax((wfm < y_cut) & (x_index > i_max))
+    #     i_left = np.argmax((wfm[:i_max] < y_cut)*x_index[:i_max])
+
+    #     y_fit = wfm[i_left:i_right]
+
+    #     x_fit = np.arange(y_fit.size)
+    #     def parabola(x, a, x0, c):
+    #         return a - c * np.square(x - x0)
+
+    #     popt, _ = scipy.optimize.curve_fit(
+    #         f=parabola,
+    #         xdata=x_fit,
+    #         ydata=y_fit,
+    #         p0=(y_max, i_max, 0.01),
+    #     )
+
+    #     y_peak[idx] = popt[0]
+
+    # print(y_peak.shape)
+
+    # plt.hist(y_peak[0], 30)
+
+    # # for i in range(24):
+    # #     plt.plot(x_time, y_data[i, 0, :])
+    # plt.show()
 
     # hits_frames = hits_frames.sum(axis=-3)
 
@@ -190,7 +264,7 @@ if __name__ == '__main__':
     # fig.canvas.mpl_connect('button_press_event', press_event)
 
     # ############################################################################
-    
+
     # def slider_range_onchanged(_):
     #     global range_hits, bins_hits, bars_hits
     #     log_min = np.log(range_hits_full[0])
