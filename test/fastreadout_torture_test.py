@@ -22,9 +22,9 @@ from readout.instructions import Finish, GetTime, Sleep
 
 ############################################################################
 
-cfg_words_per_prog = 730  # less than 3kbytes per run!
-cfg_prog_per_round = 255
-cfg_rounds = 2000000
+cfg_words_per_prog = 2000 # less than 8kbytes per prog
+cfg_prog_per_round = 5000 # 40MB per run -> approx 1s
+cfg_rounds = 86400
 
 cfg_len_expect = cfg_words_per_prog * cfg_prog_per_round * 4
 
@@ -95,6 +95,6 @@ running = False
 t_recv.join()
 
 t_end = time.perf_counter()
-n_gb = n_tot / 1024**3
-speed = n_gb / (t_end - t_start)
-print(f'{n_gb:0.2f} GB total, {speed:0.2f} MB/s')
+n_mb = n_tot / 1024**2
+speed = n_mb / (t_end - t_start)
+print(f'{n_mb/1024:0.2f} GB total, {speed:0.2f} MB/s')
