@@ -33,6 +33,7 @@ class FastReadout:
     def close(self) -> None:
         self.event_stop.set()
         self.thread_read.join()
+        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
         self.ftdi.close()
 
     def read(self) -> None:

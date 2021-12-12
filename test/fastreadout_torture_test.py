@@ -95,6 +95,6 @@ running = False
 t_recv.join()
 
 t_end = time.perf_counter()
-n_mb = n_tot / 1024**2
-speed = n_mb / (t_end - t_start)
-print(f'{n_mb:0.2f} MB total, {speed:0.2f} MB/s')
+n_gb = n_tot / 1024**3
+speed = n_gb / (t_end - t_start)
+print(f'{n_gb:0.2f} GB total, {speed:0.2f} MB/s')
