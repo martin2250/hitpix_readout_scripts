@@ -17,7 +17,7 @@ def __get_config_dict_ext() -> dict:
         # injection
         'pulse_us': 25.0,
         'pause_us': 50.0,
-        'inject_volts': 1.4,
+        'inject_volts': 0.7,
     }
 
 

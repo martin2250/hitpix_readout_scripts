@@ -35,7 +35,8 @@ def read_ampout_snr(
     ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
     ro.sm_exec(prog_col_config(cc.generate(), 2))
 
-    scope.record_sequence(num_injections, num_points, wait=False)
+    if not no_readout:
+        scope.record_sequence(num_injections, num_points, wait=False)
 
     time.sleep(0.1) # let ampout settle
 
@@ -43,11 +44,11 @@ def read_ampout_snr(
         Inject(num_injections),
     ])
     ro.wait_sm_idle()
-    scope.wait_complete()
 
     if no_readout:
         return np.zeros((0, 0, 0)), 0, 0
 
+    scope.wait_complete()
     y_data, _, time_offset, time_delta = scope.get_sequence_data([1])
 
     return y_data[0], time_offset, time_delta
