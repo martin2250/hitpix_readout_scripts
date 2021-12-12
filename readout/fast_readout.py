@@ -36,14 +36,16 @@ class FastReadout:
 
     def read(self) -> None:
         buffer = bytearray()
+        n_tot = 0
         while not self.event_stop.is_set():
             data_new = self.ftdi.read(16*4096)
             if not isinstance(data_new, bytes) or not data_new:
                 time.sleep(0.001)
                 continue
+            n_tot += len(data_new)
             buffer.extend(data_new)
             # check if there are complete packets in the buffer
-            if not b'\x00' in buffer:
+            if not b'\x00' in data_new:
                 continue
             index = buffer.rindex(b'\x00')
             packets = buffer[:index].split(b'\x00')
@@ -55,6 +57,7 @@ class FastReadout:
                     response.event.set()
                 except queue.Empty:
                     print('fastro: received unexpected response', packet)
+        print(f'fastreadout total bytes: {n_tot}')
 
     def expect_response(self) -> Response:
         response = Response()

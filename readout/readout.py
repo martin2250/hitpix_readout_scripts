@@ -53,6 +53,7 @@ class Readout:
         self._timeout = timeout
         self._time_sync: Optional[tuple[int, float]] = None
         self._serial_port.set_low_latency_mode(True)
+        self._sm_error_count = 0
     
     def close(self) -> None:
         self.event_stop.set()
@@ -207,16 +208,20 @@ class Readout:
 
     def get_sm_status(self) -> SmStatus:
         value = self.read_register(Readout.ADDR_SM_STATUS)
+        error_count = (value >> 8) & 0xff
+        if error_count != self._sm_error_count:
+            print(f'SM errors: {error_count}')
+            self._sm_error_count = error_count
         return Readout.SmStatus(
             remaining_runs = value & 0xff,
-            error_count    = (value >> 8) & 0xff,
+            error_count    = error_count,
             idle           = (value & (1 << 16)) != 0,
             active         = (value & (1 << 17)) != 0,
         )
     
     def wait_sm_idle(self, timeout: float = 1.) -> None:
         t_timeout = time.monotonic() + timeout
-        while not self.get_sm_status().idle:
+        while self.get_sm_status().active:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
 
