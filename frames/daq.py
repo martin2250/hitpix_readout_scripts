@@ -76,6 +76,8 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
 
     frames = np.hstack(frames).reshape(-1, 24, 24)
     timestamps = np.hstack(timestamps)
+    # only store timestamp of first row
+    timestamps = timestamps[::24]
 
     times = ro.convert_time(timestamps)
 
