@@ -20,6 +20,7 @@ class FastReadout:
         time.sleep(10e-3)
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
         self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
+        self.ftdi.ftdi_fn.ftdi_set_latency_timer(2)
         for _ in range(3):
             time.sleep(50e-3)
             self.ftdi.ftdi_fn.ftdi_usb_purge_rx_buffer()
@@ -38,7 +39,7 @@ class FastReadout:
         buffer = bytearray()
         n_tot = 0
         while not self.event_stop.is_set():
-            data_new = self.ftdi.read(16*4096)
+            data_new = self.ftdi.read(1 << 20)
             if not isinstance(data_new, bytes) or not data_new:
                 time.sleep(0.001)
                 continue

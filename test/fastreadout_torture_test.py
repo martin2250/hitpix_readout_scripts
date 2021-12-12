@@ -47,7 +47,7 @@ atexit.register(ro.close)
 
 prog = [
     GetTime(),
-    Sleep(2),
+    Sleep(4),
 ] * cfg_words_per_prog
 prog.append(Finish())
 
@@ -59,19 +59,21 @@ n_tot = 0
 t_start = time.perf_counter()
 q_resp = queue.Queue()
 running = True
-
+error = False
 
 def receive():
-    global n_tot, running, q_resp
+    global n_tot, running, q_resp, error
     while running or not q_resp.empty():
         resp: fast_readout.Response = q_resp.get()
         q_resp.task_done()
         resp.event.wait(5.0)
         if resp.data is None:
             print('data is None!')
+            error = True
             continue
         if len(resp.data) != cfg_len_expect:
             print(f'data length {len(resp.data)} != {cfg_len_expect}')
+            error = True
         n_tot += len(resp.data)
 
 
@@ -83,6 +85,9 @@ try:
         q_resp.put(fastreadout.expect_response())
         ro.sm_start(cfg_prog_per_round)
         ro.wait_sm_idle(5.0)
+        if error:
+            print('aborting due to error')
+            break
 except KeyboardInterrupt:
     pass
 
