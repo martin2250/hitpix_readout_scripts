@@ -112,7 +112,7 @@ if __name__ == '__main__':
     results = ProcessPoolExecutor().map(fit_job, fit_jobs)
 
     # store in final results array
-    for result, idx in tqdm.tqdm(results):
+    for result, idx in tqdm.tqdm(results, total=np.prod(scan_shape)):
         threshold[idx], noise[idx] = result
 
     # convert noise to mV

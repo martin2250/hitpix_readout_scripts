@@ -52,7 +52,6 @@ if __name__ == '__main__':
         )
         num_wfms = data_0.shape[0]
         len_wfm = data_0.shape[1]
-        del data_0
 
         num_wfm_examples = 10
 
@@ -63,6 +62,8 @@ if __name__ == '__main__':
             dset_name = 'ampout_snr' + ''.join(f'_{i}' for i in idx)
             dset_snr = file[dset_name]
             assert isinstance(dset_snr, h5py.Dataset)
+            if dset_snr.shape != data_0.shape:
+                return idx, np.full(data_0.shape[0], np.nan), np.zeros((num_wfm_examples, len_wfm))
             data = dset_snr[()]
             assert isinstance(data, np.ndarray)
             if data.ndim == 3:
@@ -71,7 +72,10 @@ if __name__ == '__main__':
             # iterate over all waveforms and find baseline + peak
             for i, wfm in enumerate(data):
                 assert isinstance(wfm, np.ndarray)
-                peaks[i] = ampout_snr.analysis.fit_peak(wfm)
+                try:
+                    peaks[i] = ampout_snr.analysis.fit_peak(wfm)
+                except:
+                    pass
             # calculate baselines
             baselines = np.mean(data[:,:cnt_baseline], axis=1)
             # get results
@@ -108,6 +112,8 @@ if __name__ == '__main__':
 
     ################################################################################
     # histograms of peak heights
+
+    y_peak = np.ma.array(y_peak, mask=~np.isfinite(y_peak))
 
     y_peak_range = np.min(y_peak), np.max(y_peak)
     y_peak_numbins = int(3 * (y_peak_range[1] - y_peak_range[0]) / np.mean(np.std(y_peak, axis=-1)))
