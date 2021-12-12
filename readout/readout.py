@@ -6,6 +6,7 @@ from cobs import cobs
 import threading
 import queue
 from dataclasses import dataclass
+import struct
 
 from . import Response
 
@@ -140,9 +141,10 @@ class Readout:
         self.send_packet(bytes([self.CMD_SM_WRITE]) + offset.to_bytes(2, 'little') + data)
 
     def sm_start(self, runs: int = 1, offset: int = 0) -> None:
-        assert runs in range(256)
+        assert runs in range(0x10000)
+        assert offset in range(0x10000)
         self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_START, *offset.to_bytes(2, 'little'), runs]))
+        self.send_packet(struct.pack('<BHH', self.CMD_SM_START, offset, runs))
 
     def sm_abort(self) -> None:
         self._expect_response()
@@ -208,15 +210,15 @@ class Readout:
 
     def get_sm_status(self) -> SmStatus:
         value = self.read_register(Readout.ADDR_SM_STATUS)
-        error_count = (value >> 8) & 0xff
+        error_count = (value >> 16) & 0xff
         if error_count != self._sm_error_count:
             print(f'SM errors: {error_count}')
             self._sm_error_count = error_count
         return Readout.SmStatus(
-            remaining_runs = value & 0xff,
+            remaining_runs = value & 0xffff,
             error_count    = error_count,
-            idle           = (value & (1 << 16)) != 0,
-            active         = (value & (1 << 17)) != 0,
+            idle           = (value & (1 << 24)) != 0,
+            active         = (value & (1 << 25)) != 0,
         )
     
     def wait_sm_idle(self, timeout: float = 1.) -> None:
