@@ -71,7 +71,10 @@ if __name__ == '__main__':
             # iterate over all waveforms and find baseline + peak
             for i, wfm in enumerate(data):
                 assert isinstance(wfm, np.ndarray)
-                peaks[i] = ampout_snr.analysis.fit_peak(wfm)
+                try:
+                    peaks[i] = ampout_snr.analysis.fit_peak(wfm)
+                except:
+                    peaks[i] = 0
             # calculate baselines
             baselines = np.mean(data[:,:cnt_baseline], axis=1)
             # get results
