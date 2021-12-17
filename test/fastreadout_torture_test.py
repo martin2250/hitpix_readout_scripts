@@ -81,7 +81,7 @@ t_recv = threading.Thread(target=receive)
 t_recv.start()
 
 try:
-    for _ in tqdm.tqdm(range(cfg_rounds)):
+    for _ in tqdm.tqdm(range(cfg_rounds), dynamic_ncols=True):
         q_resp.put(fastreadout.expect_response())
         ro.sm_start(cfg_prog_per_round)
         ro.wait_sm_idle(5.0)

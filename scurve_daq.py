@@ -120,8 +120,8 @@ def main(
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
             # create nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape))
-            prog_meas = tqdm.tqdm(leave=None)
+            prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
+            prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
                 # check if this measurement is already present in file
@@ -152,7 +152,7 @@ def main(
         config = config_from_dict(config_dict_template)
 
         res = measure_scurves(ro, fastreadout, config,
-                                read_noise, tqdm.tqdm())
+                                read_noise, tqdm.tqdm(dynamic_ncols=True))
 
         with h5py.File(path_output, 'w') as file:
             group = file.create_group('scurve')

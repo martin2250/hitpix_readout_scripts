@@ -128,8 +128,8 @@ def main(
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
             # nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape))
-            prog_meas = tqdm.tqdm(leave=None)
+            prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
+            prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
                 # check if this measurement is already present in file
@@ -164,7 +164,7 @@ def main(
         config = config_from_dict(config_dict_template)
         set_voltages(config)
 
-        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm())
+        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True))
 
         if sums_only:
             shape_new = (1, *frames.shape[1:])
