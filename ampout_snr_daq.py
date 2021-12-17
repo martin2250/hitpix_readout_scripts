@@ -141,7 +141,7 @@ def main(
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
             # nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape))
+            prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
                 # check if this measurement is already present in file

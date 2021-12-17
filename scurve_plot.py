@@ -112,7 +112,7 @@ if __name__ == '__main__':
     results = ProcessPoolExecutor().map(fit_job, fit_jobs)
 
     # store in final results array
-    for result, idx in tqdm.tqdm(results, total=np.prod(scan_shape)):
+    for result, idx in tqdm.tqdm(results, total=np.prod(scan_shape), dynamic_ncols=True):
         threshold[idx], noise[idx] = result
 
     # convert noise to mV
@@ -160,8 +160,8 @@ if __name__ == '__main__':
     threshold_clean = threshold[np.isfinite(threshold) & (threshold > -0.5) & (threshold < 2)]
     noise_clean = noise[np.isfinite(noise) & (noise > 0) & (noise < 1000)]
 
-    range_threshold = np.min(threshold_clean), np.max(threshold_clean)
-    range_noise = np.min(noise_clean), np.max(noise_clean)
+    range_threshold = np.min(threshold_clean), np.max(threshold_clean) # if threshold_clean.size > 0 else 0, 1
+    range_noise = np.min(noise_clean), np.max(noise_clean) # if noise_clean.size > 0 else 0, 1
 
     # plot histograms
     _, bins_threshold, bars_threshold = ax_hthresh.hist(

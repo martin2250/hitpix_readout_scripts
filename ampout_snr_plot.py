@@ -89,6 +89,7 @@ if __name__ == '__main__':
         for idx, data, example in tqdm.tqdm(
             pex.map(read_idx, np.ndindex(*scan_shape)),
             total=np.prod(scan_shape),
+            dynamic_ncols=True,
         ):
             y_peak[idx] = data
             y_example[idx] = example
