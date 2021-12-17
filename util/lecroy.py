@@ -23,6 +23,7 @@ class Connection:
 class TMCConnection(Connection):
     def __init__(self, vendor: int = 0x05ff, device: int = 0x1023):
         self._port = usbtmc.Instrument(vendor, device)
+        self._port.timeout = 15.0
 
     def write(self, command: str) -> None:
         self._port.write(command)
