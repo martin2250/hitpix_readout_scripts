@@ -75,11 +75,7 @@ if __name__ == '__main__':
                 try:
                     peaks[i] = ampout_snr.analysis.fit_peak(wfm)
                 except:
-<<<<<<< HEAD
-                    peaks[i] = 0
-=======
                     pass
->>>>>>> 0dd143cd60c18ce07d8ccae103abd25288f0afd7
             # calculate baselines
             baselines = np.mean(data[:,:cnt_baseline], axis=1)
             # get results

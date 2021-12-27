@@ -115,7 +115,8 @@ if __name__ == '__main__':
         valmax=1.0,
         valinit=1.0,
     )
-    sliders[id_slider].label.set_backgroundcolor('lightgreen')
+    if sliders:
+        sliders[id_slider].label.set_backgroundcolor('lightgreen')
 
     # data ranges
     range_hits_full = max(np.min(hits_frames), 10), np.max(hits_frames)
