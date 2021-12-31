@@ -24,6 +24,7 @@ def main(
 ):
     import copy
     import time
+    import sys
     from pathlib import Path
 
     import h5py
@@ -126,6 +127,7 @@ def main(
             # save scan parameters first
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
+            file.attrs['commandline'] = sys.argv
             # create nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
             prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
@@ -162,6 +164,7 @@ def main(
                                 read_noise, tqdm.tqdm(dynamic_ncols=True))
 
         with h5py.File(path_output, 'w') as file:
+            file.attrs['commandline'] = sys.argv
             group = file.create_group('scurve')
             save_scurve(group, config, *res)
 

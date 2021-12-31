@@ -35,6 +35,7 @@ def main(
     import atexit
     import copy
     import time
+    import sys
     from pathlib import Path
 
     import h5py
@@ -140,6 +141,7 @@ def main(
             # save scan parameters first
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
+            file.attrs['commandline'] = sys.argv
             # nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
             # scan over all possible combinations
@@ -185,6 +187,7 @@ def main(
 
         # store measurement
         with h5py.File(path_output, 'w') as file:
+            file.attrs['commandline'] = sys.argv
             save_ampout_snr(file, 'ampout_snr', config, *res)
 
 
