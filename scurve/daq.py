@@ -3,7 +3,7 @@ from typing import Optional
 
 import numpy as np
 import tqdm
-from hitpix.hitpix1 import HitPix1Readout
+from hitpix.readout import HitPixReadout
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish
 from readout.sm_prog import decode_column_packets, prog_dac_config
@@ -12,7 +12,7 @@ from .io import SCurveConfig
 from .sm_prog import prog_injections_full, prog_injections_half
 
 
-def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurveConfig, read_noise: bool, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
+def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveConfig, read_noise: bool, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
     ############################################################################
     # configure readout & chip
 
@@ -33,9 +33,9 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     # prepare statemachine
 
     if read_noise:
-        prog_injection = prog_injections_half(config.injections_per_round, config.shift_clk_div)
+        prog_injection = prog_injections_half(config.injections_per_round, config.shift_clk_div, 10, ro.setup)
     else:
-        prog_injection = prog_injections_full(config.injections_per_round, config.shift_clk_div)
+        prog_injection = prog_injections_full(config.injections_per_round, config.shift_clk_div, 10, ro.setup)
     prog_injection.append(Finish())
     ro.sm_write(prog_injection)
 
@@ -68,6 +68,9 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
     ############################################################################
     # process data
 
+    setup = ro.setup
+    ctr_max = 1 << setup.chip.bits_counter
+
     hits_signal = []
     hits_noise = []
 
@@ -76,30 +79,29 @@ def measure_scurves(ro: HitPix1Readout, fastreadout: FastReadout, config: SCurve
         assert response.data is not None
 
         # decode hits
-        _, hits = decode_column_packets(response.data)
-        hits = (256 - hits) % 256  # counter count down
-
+        _, hits = decode_column_packets(response.data, setup.pixel_columns, setup.chip.bits_adder, setup.chip.bits_counter)
+        hits = (ctr_max - hits) % ctr_max  # counter count down
 
         if read_noise:
             # sum over all hit frames
-            hits = hits.reshape(-1, 48, 24)
+            hits = hits.reshape(-1, 2 * setup.pixel_rows, setup.pixel_columns)
             hits = np.sum(hits, axis=0)
 
             # separate signal and noise columns
-            even = hits[:24]
-            odd = hits[24:]
+            even = hits[:setup.pixel_rows]
+            odd = hits[setup.pixel_rows:]
 
             hits_signal.append(np.where(
-                np.arange(24) % 2 == 0,
+                np.arange(setup.pixel_rows) % 2 == 0,
                 even, odd,
             ))
             hits_noise.append(np.where(
-                np.arange(24) % 2 == 1,
+                np.arange(setup.pixel_rows) % 2 == 1,
                 even, odd,
             ))
         else:
             # sum over all hit frames
-            hits = hits.reshape(-1, 24, 24)
+            hits = hits.reshape(-1, setup.pixel_rows, setup.pixel_columns)
             hits = np.sum(hits, axis=0)
             hits_signal.append(hits)
 
