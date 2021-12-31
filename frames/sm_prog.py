@@ -1,26 +1,29 @@
-from hitpix.hitpix1 import HitPix1ColumnConfig, HitPix1Pins
+from hitpix import HitPixColumnConfig, HitPixSetup, ReadoutPins
 from readout.instructions import *
 from readout.sm_prog import prog_shift_dense, prog_sleep
 
 
-def prog_read_frames(frame_cycles: int, pulse_cycles: int = 10, shift_clk_div: int = 1, pause_cycles: int = 0) -> tuple[list[Instruction], list[Instruction]]:
+def prog_read_frames(frame_cycles: int, pulse_cycles: int, shift_clk_div: int, pause_cycles: int, setup: HitPixSetup) -> tuple[list[Instruction], list[Instruction]]:
     '''returns programs (init and readout)'''
+    assert setup.chip_rows == 1
+    chip = setup.chip
+
     cfg_int = SetCfg(
         shift_rx_invert=True,
         shift_tx_invert=True,
         shift_toggle=True,
         shift_select_dac=False,
-        shift_word_len=2 * 13,
+        shift_word_len=2 * chip.bits_adder,
         shift_clk_div=shift_clk_div,
         pins=0,
     )
 
     # init
-    col_cfg_init = HitPix1ColumnConfig(0, 0, 0, 24)
+    col_cfg_init = HitPixColumnConfig(0, 0, 0, -1)
     prog_init = [
         Reset(True, True),
-        *prog_shift_dense(col_cfg_init.generate(), False),
-        cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+        *prog_shift_dense(setup.encode_column_config(col_cfg_init), False),
+        cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(pulse_cycles),
         cfg_int,
     ]
@@ -30,38 +33,38 @@ def prog_read_frames(frame_cycles: int, pulse_cycles: int = 10, shift_clk_div: i
         # wait (empty if pause_cycles = 0)
         *prog_sleep(pause_cycles),
         # reset counters
-        cfg_int.set_pin(HitPix1Pins.ro_rescnt, True),
+        cfg_int.set_pin(ReadoutPins.ro_rescnt, True),
         Sleep(pulse_cycles),
         cfg_int,
         # take data
-        cfg_int.set_pin(HitPix1Pins.ro_frame, True),
+        cfg_int.set_pin(ReadoutPins.ro_frame, True),
         *prog_sleep(frame_cycles),
         cfg_int,
     ]
-    for row in range(25):
-        col_cfg = HitPix1ColumnConfig(0, 0, 0, row)
+    for row in range(chip.rows + 1):
+        col_cfg = HitPixColumnConfig(0, 0, 0, row)
         # add time to make readout more consistent
         if row > 0:
             prog.append(GetTime())
         prog.extend([
             Sleep(pulse_cycles),
             Reset(True, True),
-            *prog_shift_dense(col_cfg.generate(), row > 0),
+            *prog_shift_dense(setup.encode_column_config(col_cfg), row > 0),
             Sleep(pulse_cycles),
-            cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+            cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
             Sleep(pulse_cycles),
             cfg_int,
             Sleep(pulse_cycles),
         ])
-        if row == 24:
+        if row == chip.rows:
             break
         prog.extend([
             # load count into column register
-            cfg_int.set_pin(HitPix1Pins.ro_ldcnt, True),
+            cfg_int.set_pin(ReadoutPins.ro_ldcnt, True),
             Sleep(pulse_cycles),
             cfg_int,
             Sleep(pulse_cycles),
-            cfg_int.set_pin(HitPix1Pins.ro_penable, True),
+            cfg_int.set_pin(ReadoutPins.ro_penable, True),
             Sleep(pulse_cycles),
             ShiftOut(1, False),
             Sleep(pulse_cycles),

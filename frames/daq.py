@@ -6,13 +6,13 @@ import tqdm
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish
 
-from hitpix.hitpix1 import HitPix1Readout
+from hitpix.readout import HitPixReadout
 from readout.sm_prog import decode_column_packets, prog_dac_config
 from .io import FrameConfig
 from .sm_prog import prog_read_frames
 
 
-def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
+def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, np.ndarray]:
     ############################################################################
     # configure readout & chip
 
@@ -22,6 +22,8 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
 
     time.sleep(0.025)
+
+    setup = ro.setup
 
     ############################################################################
     # prepare statemachine
@@ -64,20 +66,22 @@ def read_frames(ro: HitPix1Readout, fastreadout: FastReadout, config: FrameConfi
     frames = []
     timestamps = []
 
+    ctr_max = 1 << setup.chip.bits_counter
+    
     for response in responses:
         # please pylance type checker
         assert response.data is not None
 
         # decode hits
-        block_timestamps, block_frames = decode_column_packets(response.data)
-        block_frames = (256 - block_frames) % 256  # counter count down
-        frames.append(block_frames.reshape(-1, 24, 24))
+        block_timestamps, block_frames = decode_column_packets(response.data, setup.pixel_columns, setup.chip.bits_adder, setup.chip.bits_counter)
+        block_frames = (ctr_max - block_frames) % ctr_max  # counter count down
+        frames.append(block_frames.reshape(-1, setup.pixel_rows, setup.pixel_columns))
         timestamps.append(block_timestamps)
 
-    frames = np.hstack(frames).reshape(-1, 24, 24)
+    frames = np.hstack(frames).reshape(-1, setup.pixel_rows, setup.pixel_columns)
     timestamps = np.hstack(timestamps)
     # only store timestamp of first row
-    timestamps = timestamps[::24]
+    timestamps = timestamps[::setup.pixel_rows]
 
     times = ro.convert_time(timestamps)
 

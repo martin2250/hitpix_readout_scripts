@@ -27,15 +27,15 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
 
     ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
 
-    time.sleep(0.1)
+    time.sleep(0.025)
 
     ############################################################################
     # prepare statemachine
 
     if read_noise:
-        prog_injection = prog_injections_half(config.injections_per_round, config.shift_clk_div, 10, ro.setup)
+        prog_injection = prog_injections_half(config.injections_per_round, config.shift_clk_div, 50, ro.setup)
     else:
-        prog_injection = prog_injections_full(config.injections_per_round, config.shift_clk_div, 10, ro.setup)
+        prog_injection = prog_injections_full(config.injections_per_round, config.shift_clk_div, 50, ro.setup)
     prog_injection.append(Finish())
     ro.sm_write(prog_injection)
 

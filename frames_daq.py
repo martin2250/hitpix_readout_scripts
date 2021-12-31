@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import argparse
 from typing import Literal
 
 
@@ -13,6 +12,7 @@ def __get_config_dict_ext() -> dict:
 
 def main(
     output_file: str,
+    setup_name: str,
     num_frames: int,
     args_scan: list[str],
     args_set: list[str],
@@ -39,15 +39,18 @@ def main(
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
-    from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
+    from hitpix.dac import HitPixDacConfig
+    from hitpix.readout import HitPixReadout
+    import hitpix
     from readout.fast_readout import FastReadout
 
     ############################################################################
 
+    setup = hitpix.setups[setup_name]
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
     config_dict_template.update(**__get_config_dict_ext())
@@ -94,9 +97,12 @@ def main(
     serial_port_name, board = config_readout.find_board()
 
     fastreadout = FastReadout(board.fastreadout_serial_number)
+    atexit.register(fastreadout.close)
+
     time.sleep(0.05)
-    ro = HitPix1Readout(serial_port_name)
+    ro = HitPixReadout(serial_port_name, setup)
     ro.initialize()
+    atexit.register(ro.close)
 
     ############################################################################
 
@@ -118,7 +124,6 @@ def main(
         vdd_channel.set_voltage(config.voltage_vdd)
         vssa_channel.set_voltage(config.voltage_vssa)
 
-    atexit.register(fastreadout.close)
     atexit.register(hv_channel.shutdown)
 
     ############################################################################
@@ -180,11 +185,20 @@ def main(
 
 
 if __name__ == '__main__':
+    import argparse
+    import hitpix.defaults
     parser = argparse.ArgumentParser()
 
     a_output_file = parser.add_argument(
         'output_file',
         help='h5 output file',
+    )
+
+    parser.add_argument(
+        '--setup',
+        default=hitpix.defaults.setups[0],
+        choices=hitpix.defaults.setups,
+        help='which hitpix setup to use',
     )
 
     parser.add_argument(
@@ -270,6 +284,7 @@ if __name__ == '__main__':
 
     main(
         output_file=args.output_file,
+        setup_name=args.setup,
         num_frames=args.frames,
         args_scan=args.scan or [],
         args_set=args.set or [],

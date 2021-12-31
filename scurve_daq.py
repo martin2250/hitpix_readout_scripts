@@ -97,12 +97,13 @@ def main(
     serial_port_name, board = config_readout.find_board()
 
     fastreadout = FastReadout(board.fastreadout_serial_number)
+    atexit.register(fastreadout.close)
+
     time.sleep(0.05)
     ro = HitPixReadout(serial_port_name, setup)
     ro.initialize()
-
     atexit.register(ro.close)
-    atexit.register(fastreadout.close)
+
 
     ############################################################################
 
