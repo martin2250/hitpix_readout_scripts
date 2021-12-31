@@ -17,3 +17,9 @@ voltages_default = {
     'vssa': 1.25,
     'vdd': 1.85,
 }
+
+setups = [
+    'hitpix1',
+    'hitpix2-1x1',
+    'hitpix2-1x5',
+]
