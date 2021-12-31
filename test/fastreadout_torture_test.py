@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 
+
 if True:  # do not reorder with autopep8 or sortimports
     sys.path.insert(1, str(Path(__file__).parents[1]))
 
@@ -15,7 +16,8 @@ import tqdm
 import util.configuration
 import util.gridscan
 import util.voltage_channel
-from hitpix.hitpix1 import HitPix1Readout
+from hitpix.readout import HitPixReadout
+import hitpix, hitpix.defaults
 from readout import fast_readout
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish, GetTime, Sleep
@@ -35,11 +37,11 @@ config_readout = util.configuration.load_config()
 serial_port_name, board = config_readout.find_board()
 
 fastreadout = FastReadout(board.fastreadout_serial_number)
-time.sleep(0.05)
-ro = HitPix1Readout(serial_port_name)
-ro.initialize()
-
 atexit.register(fastreadout.close)
+time.sleep(0.05)
+
+ro = HitPixReadout(serial_port_name, hitpix.setups[hitpix.defaults.setups[0]])
+ro.initialize()
 atexit.register(ro.close)
 
 ############################################################################
