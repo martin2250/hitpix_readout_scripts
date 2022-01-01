@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Literal
+from typing import Literal, Optional
 
 
 def __get_config_dict_ext() -> dict:
@@ -22,17 +22,19 @@ def main(
     hv_driver: str = 'manual',
     vdd_driver: str = 'manual',
     vssa_driver: str = 'manual',
+    live_fps: Optional[float] = False,
 ):
     import atexit
     import copy
-    import time
     import sys
+    import time
     from pathlib import Path
 
     import h5py
     import numpy as np
     import tqdm
 
+    import hitpix
     import hitpix.defaults
     import util.configuration
     import util.gridscan
@@ -41,7 +43,6 @@ def main(
     from frames.io import FrameConfig, save_frames
     from hitpix.dac import HitPixDacConfig
     from hitpix.readout import HitPixReadout
-    import hitpix
     from readout.fast_readout import FastReadout
 
     ############################################################################
@@ -117,7 +118,8 @@ def main(
 
     hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, 'HV')
     vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, 'VDD')
-    vssa_channel = util.voltage_channel.open_voltage_channel(vssa_driver, 'VSSA')
+    vssa_channel = util.voltage_channel.open_voltage_channel(
+        vssa_driver, 'VSSA')
 
     def set_voltages(config: FrameConfig):
         hv_channel.set_voltage(config.voltage_hv)
@@ -135,7 +137,8 @@ def main(
             util.gridscan.save_scan(group_scan, scan_parameters)
             file.attrs['commandline'] = sys.argv
             # nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
+            prog_scan = tqdm.tqdm(total=np.product(
+                scan_shape), dynamic_ncols=True)
             prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
@@ -171,7 +174,29 @@ def main(
         config = config_from_dict(config_dict_template)
         set_voltages(config)
 
-        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True))
+        callback = None
+        if live_fps is not None:
+            assert live_fps < 30.0 and live_fps > 0.01
+            hits = np.zeros((setup.pixel_rows, setup.pixel_columns), np.int64)
+            t_update = time.monotonic()
+
+            import matplotlib.pyplot as plt
+            image = plt.imshow(hits)
+            plt.ion()
+            plt.show()
+
+            def plot_callback(hits_new):
+                nonlocal hits, t_update, image
+                hits += hits_new
+                if (time.monotonic() - t_update) > 1/live_fps:
+                    image.set_data(hits)
+                    hits.fill(0)
+                    t_update = time.monotonic()
+
+            callback = plot_callback
+
+        frames, times = read_frames(
+            ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True), callback)
 
         if sums_only:
             shape_new = (1, *frames.shape[1:])
@@ -186,6 +211,7 @@ def main(
 
 if __name__ == '__main__':
     import argparse
+
     import hitpix.defaults
     parser = argparse.ArgumentParser()
 
@@ -260,6 +286,13 @@ if __name__ == '__main__':
         help='what to do when file exists',
     )
 
+    parser.add_argument(
+        '--live_fps',
+        metavar='FPS',
+        type=float, default=None,
+        help='show live image of frames',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
@@ -282,6 +315,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # live mode is not available during parameter scans
+    assert not (args.live_fps and args.scan)
+
     main(
         output_file=args.output_file,
         setup_name=args.setup,
@@ -294,4 +330,5 @@ if __name__ == '__main__':
         vdd_driver=args.vdd_driver,
         file_exists=args.exists,
         sums_only=args.sums_only,
+        live_fps=args.live_fps,
     )
