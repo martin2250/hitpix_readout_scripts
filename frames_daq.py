@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Literal, Optional
+from typing import Literal, Optional, cast, Any
 
 
 def __get_config_dict_ext() -> dict:
@@ -177,23 +177,63 @@ def main(
         callback = None
         if live_fps is not None:
             assert live_fps < 30.0 and live_fps > 0.01
-            hits = np.zeros((setup.pixel_rows, setup.pixel_columns), np.int64)
-            t_update = time.monotonic()
+            from multiprocessing import Process, Queue
+            from queue import Empty
 
-            import matplotlib.pyplot as plt
-            image = plt.imshow(hits)
-            plt.ion()
-            plt.show()
+            q_hits = Queue()
 
             def plot_callback(hits_new):
-                nonlocal hits, t_update, image
-                hits += hits_new
-                if (time.monotonic() - t_update) > 1/live_fps:
-                    image.set_data(hits)
-                    hits.fill(0)
-                    t_update = time.monotonic()
-
+                q_hits.put(np.sum(hits_new, axis=0).astype(np.int64))
             callback = plot_callback
+
+            frames_per_run = 1e6 / (live_fps * config.frame_length_us)
+            config.frames_per_run = max(1, min(250, int(frames_per_run)))
+            plot_frame_us = config.frames_per_run * config.frame_length_us
+            # matplotlib uses int typing but accepts floats
+            plot_pause = cast(int, 0.25/live_fps)
+
+            def format_time(us: float) -> str:
+                if us < 1000.0:
+                    return f'{us:0.1f} us'
+                us /= 1000
+                if us < 1000.0:
+                    return f'{us:0.1f} ms'
+                us /= 1000
+                return f'{us:0.1f} s'
+
+            def plot_process():
+                hits = np.zeros(
+                    (setup.pixel_rows, setup.pixel_columns), np.int64)
+
+                import matplotlib.pyplot as plt
+                _, (ax_frame, ax_total) = cast(Any, plt.subplots(1, 2))
+                image_frame = ax_frame.imshow(hits)
+                image_total = ax_total.imshow(hits)
+                plt.colorbar(image_frame, ax=ax_frame)
+                plt.colorbar(image_total, ax=ax_total)
+                plot_total_us = 0
+                ax_frame.set_title(f'hits / {format_time(plot_frame_us)}')
+
+                plt.ion()
+                plt.show()
+
+                while True:
+                    plt.pause(plot_pause)
+                    try:
+                        hits_new = q_hits.get_nowait()
+                        image_frame.set_data(hits_new)
+                        image_frame.set_clim(0, np.max(hits_new))
+                        hits += hits_new
+                        plot_total_us += plot_frame_us
+                        image_total.set_data(hits)
+                        image_total.set_clim(0, np.max(hits))
+                        ax_total.set_title(f'hits / {format_time(plot_total_us)}')
+                    except Empty:
+                        pass
+            Process(
+                target=plot_process,
+                daemon=True,
+            ).start()
 
         frames, times = read_frames(
             ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True), callback)
