@@ -3,7 +3,7 @@ import bitarray.util
 import numpy as np
 
 from .instructions import *
-from hitpix.hitpix1 import HitPix1Pins
+from hitpix import ReadoutPins
 
 
 def prog_shift_simple(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
@@ -106,7 +106,7 @@ def prog_dac_config(cfg_dac_bin: bitarray.bitarray, shift_clk_div: int = 7) -> l
         Sleep(100),
         *prog_shift_dense(cfg_dac_bin, False),
         Sleep(100),
-        cfg_int.set_pin(HitPix1Pins.dac_ld, True),
+        cfg_int.set_pin(ReadoutPins.dac_ld, True),
         Sleep(100),
         cfg_int,
     ]
@@ -127,7 +127,7 @@ def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7) -> l
         Sleep(50),
         *prog_shift_dense(cfg_col_bin, False),
         Sleep(50),
-        cfg_int.set_pin(HitPix1Pins.ro_ldconfig, True),
+        cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(50),
         cfg_int,
     ]

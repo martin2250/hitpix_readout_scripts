@@ -21,11 +21,14 @@ class Sleep(Instruction):
 @dataclass
 class Inject(Instruction):
     injection_count: int
+    injection_sel: int = 0 # 0 = A, 1 = B
     
     def to_binary(self) -> int:
         assert (self.injection_count - 1) in range(1 << 16)
+        assert self.injection_sel in (0, 1)
         instr_mask = 0b00010010 << 24
         instr_mask |= (self.injection_count - 1)
+        instr_mask |= self.injection_sel << 16
         return instr_mask
 
 @dataclass

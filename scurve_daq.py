@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import argparse
 from typing import Literal
+
+from hitpix import HitPixSetup
 
 def __get_config_dict_ext() -> dict:
     return {
@@ -10,6 +11,7 @@ def __get_config_dict_ext() -> dict:
 
 def main(
     output_file: str,
+    setup_name: str,
     injection_voltage_range: str,
     injections_total: int,
     injections_per_round: int,
@@ -22,6 +24,7 @@ def main(
 ):
     import copy
     import time
+    import sys
     from pathlib import Path
 
     import h5py
@@ -33,16 +36,21 @@ def main(
     import util.configuration
     import util.gridscan
     import util.voltage_channel
-    from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
+    from hitpix.dac import HitPixDacConfig
+    from hitpix.readout import HitPixReadout
+    import hitpix
     from readout.fast_readout import FastReadout
     from scurve.daq import measure_scurves
     from scurve.io import SCurveConfig, save_scurve
 
+    ############################################################################
+
+    setup = hitpix.setups[setup_name]
     injection_voltage = util.gridscan.parse_range(injection_voltage_range)
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
     config_dict_template.update(**__get_config_dict_ext())
@@ -89,12 +97,13 @@ def main(
     serial_port_name, board = config_readout.find_board()
 
     fastreadout = FastReadout(board.fastreadout_serial_number)
-    time.sleep(0.05)
-    ro = HitPix1Readout(serial_port_name)
-    ro.initialize()
-
-    atexit.register(ro.close)
     atexit.register(fastreadout.close)
+
+    time.sleep(0.05)
+    ro = HitPixReadout(serial_port_name, setup)
+    ro.initialize()
+    atexit.register(ro.close)
+
 
     ############################################################################
 
@@ -119,6 +128,7 @@ def main(
             # save scan parameters first
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
+            file.attrs['commandline'] = sys.argv
             # create nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
             prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
@@ -155,6 +165,7 @@ def main(
                                 read_noise, tqdm.tqdm(dynamic_ncols=True))
 
         with h5py.File(path_output, 'w') as file:
+            file.attrs['commandline'] = sys.argv
             group = file.create_group('scurve')
             save_scurve(group, config, *res)
 
@@ -163,11 +174,20 @@ def main(
 
 
 if __name__ == '__main__':
+    import argparse
+    import hitpix.defaults
     parser = argparse.ArgumentParser()
 
     a_output_file = parser.add_argument(
         'output_file',
         help='h5 output file',
+    )
+
+    parser.add_argument(
+        '--setup',
+        default=hitpix.defaults.setups[0],
+        choices=hitpix.defaults.setups,
+        help='which hitpix setup to use',
     )
 
     def parse_injections(s: str) -> tuple[int, int]:
@@ -232,7 +252,6 @@ if __name__ == '__main__':
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
 
-        import hitpix.defaults
         choices_set = []
         for name, value in hitpix.defaults.dac_default_hitpix1.items():
             choices_set.append(f'dac.{name}={value}')
@@ -252,6 +271,7 @@ if __name__ == '__main__':
 
     main(
         output_file=args.output_file,
+        setup_name=args.setup,
         injection_voltage_range=args.voltages,
         injections_total=args.injections[0],
         injections_per_round=args.injections[1],

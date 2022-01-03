@@ -6,7 +6,6 @@ Check uniformity of pulse heights -> histogram of pulse heights.
 Fit gaussian to histogram, position/width = SNR
 '''
 
-import argparse
 from typing import Literal
 
 
@@ -23,6 +22,7 @@ def __get_config_dict_ext() -> dict:
 
 def main(
     output_file: str,
+    setup_name: str,
     num_injections: int,
     num_points: int,
     args_scan: list[str],
@@ -35,6 +35,7 @@ def main(
     import atexit
     import copy
     import time
+    import sys
     from pathlib import Path
 
     import h5py
@@ -48,15 +49,18 @@ def main(
     import util.lecroy
     import util.voltage_channel
     from ampout_snr.io import AmpOutSnrConfig, save_ampout_snr
-    from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
+    from hitpix.dac import HitPixDacConfig
+    from hitpix.readout import HitPixReadout
+    import hitpix
     from readout.fast_readout import FastReadout
 
     ############################################################################
 
+    setup = hitpix.setups[setup_name]
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
     config_dict_template.update(**__get_config_dict_ext())
@@ -103,14 +107,16 @@ def main(
 
     # open fastreadout for 60MHz clock so resets are deasserted
     fastreadout = FastReadout(board.fastreadout_serial_number)
+    atexit.register(fastreadout.close)
 
     scope = util.lecroy.Waverunner8404M(
         util.lecroy.VXI11Connection('192.168.13.178'),
     )
 
     time.sleep(0.05)
-    ro = HitPix1Readout(serial_port_name)
+    ro = HitPixReadout(serial_port_name, setup)
     ro.initialize()
+    atexit.register(ro.close)
 
     ############################################################################
 
@@ -131,7 +137,6 @@ def main(
         if updated:
             time.sleep(0.5)
 
-    atexit.register(fastreadout.close)
 
     ############################################################################
 
@@ -140,6 +145,7 @@ def main(
             # save scan parameters first
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
+            file.attrs['commandline'] = sys.argv
             # nested progress bars
             prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
             # scan over all possible combinations
@@ -185,15 +191,25 @@ def main(
 
         # store measurement
         with h5py.File(path_output, 'w') as file:
+            file.attrs['commandline'] = sys.argv
             save_ampout_snr(file, 'ampout_snr', config, *res)
 
 
 if __name__ == '__main__':
+    import argparse
+    import hitpix.defaults
     parser = argparse.ArgumentParser()
 
     a_output_file = parser.add_argument(
         'output_file',
         help='h5 output file',
+    )
+
+    parser.add_argument(
+        '--setup',
+        default=hitpix.defaults.setups[0],
+        choices=hitpix.defaults.setups,
+        help='which hitpix setup to use',
     )
 
     parser.add_argument(
@@ -265,6 +281,7 @@ if __name__ == '__main__':
 
     main(
         output_file=args.output_file,
+        setup_name=args.setup,
         num_injections=args.injections,
         args_scan=args.scan or [],
         args_set=args.set or [],

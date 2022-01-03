@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-import argparse
-from typing import Literal
+from typing import Literal, Optional
 
 
 def __get_config_dict_ext() -> dict:
@@ -13,6 +12,7 @@ def __get_config_dict_ext() -> dict:
 
 def main(
     output_file: str,
+    setup_name: str,
     num_frames: int,
     args_scan: list[str],
     args_set: list[str],
@@ -22,9 +22,11 @@ def main(
     hv_driver: str = 'manual',
     vdd_driver: str = 'manual',
     vssa_driver: str = 'manual',
+    live_fps: Optional[float] = False,
 ):
     import atexit
     import copy
+    import sys
     import time
     from pathlib import Path
 
@@ -32,21 +34,24 @@ def main(
     import numpy as np
     import tqdm
 
+    import hitpix
     import hitpix.defaults
     import util.configuration
     import util.gridscan
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
-    from hitpix.hitpix1 import HitPix1DacConfig, HitPix1Readout
+    from hitpix.dac import HitPixDacConfig
+    from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
 
     ############################################################################
 
+    setup = hitpix.setups[setup_name]
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
     config_dict_template.update(**__get_config_dict_ext())
@@ -93,9 +98,12 @@ def main(
     serial_port_name, board = config_readout.find_board()
 
     fastreadout = FastReadout(board.fastreadout_serial_number)
+    atexit.register(fastreadout.close)
+
     time.sleep(0.05)
-    ro = HitPix1Readout(serial_port_name)
+    ro = HitPixReadout(serial_port_name, setup)
     ro.initialize()
+    atexit.register(ro.close)
 
     ############################################################################
 
@@ -110,14 +118,14 @@ def main(
 
     hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, 'HV')
     vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, 'VDD')
-    vssa_channel = util.voltage_channel.open_voltage_channel(vssa_driver, 'VSSA')
+    vssa_channel = util.voltage_channel.open_voltage_channel(
+        vssa_driver, 'VSSA')
 
     def set_voltages(config: FrameConfig):
         hv_channel.set_voltage(config.voltage_hv)
         vdd_channel.set_voltage(config.voltage_vdd)
         vssa_channel.set_voltage(config.voltage_vssa)
 
-    atexit.register(fastreadout.close)
     atexit.register(hv_channel.shutdown)
 
     ############################################################################
@@ -127,8 +135,10 @@ def main(
             # save scan parameters first
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
+            file.attrs['commandline'] = sys.argv
             # nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
+            prog_scan = tqdm.tqdm(total=np.product(
+                scan_shape), dynamic_ncols=True)
             prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
@@ -164,7 +174,29 @@ def main(
         config = config_from_dict(config_dict_template)
         set_voltages(config)
 
-        frames, times = read_frames(ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True))
+        callback = None
+        if live_fps is not None:
+            assert live_fps < 30.0 and live_fps > 0.01
+            hits = np.zeros((setup.pixel_rows, setup.pixel_columns), np.int64)
+            t_update = time.monotonic()
+
+            import matplotlib.pyplot as plt
+            image = plt.imshow(hits)
+            plt.ion()
+            plt.show()
+
+            def plot_callback(hits_new):
+                nonlocal hits, t_update, image
+                hits += hits_new
+                if (time.monotonic() - t_update) > 1/live_fps:
+                    image.set_data(hits)
+                    hits.fill(0)
+                    t_update = time.monotonic()
+
+            callback = plot_callback
+
+        frames, times = read_frames(
+            ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True), callback)
 
         if sums_only:
             shape_new = (1, *frames.shape[1:])
@@ -172,16 +204,27 @@ def main(
             times = times[:1]
 
         with h5py.File(path_output, 'w') as file:
+            file.attrs['commandline'] = sys.argv
             group = file.create_group('frames')
             save_frames(group, config, frames, times)
 
 
 if __name__ == '__main__':
+    import argparse
+
+    import hitpix.defaults
     parser = argparse.ArgumentParser()
 
     a_output_file = parser.add_argument(
         'output_file',
         help='h5 output file',
+    )
+
+    parser.add_argument(
+        '--setup',
+        default=hitpix.defaults.setups[0],
+        choices=hitpix.defaults.setups,
+        help='which hitpix setup to use',
     )
 
     parser.add_argument(
@@ -243,6 +286,13 @@ if __name__ == '__main__':
         help='what to do when file exists',
     )
 
+    parser.add_argument(
+        '--live_fps',
+        metavar='FPS',
+        type=float, default=None,
+        help='show live image of frames',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import ChoicesCompleter, FilesCompleter
@@ -265,8 +315,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # live mode is not available during parameter scans
+    assert not (args.live_fps and args.scan)
+
     main(
         output_file=args.output_file,
+        setup_name=args.setup,
         num_frames=args.frames,
         args_scan=args.scan or [],
         args_set=args.set or [],
@@ -276,4 +330,5 @@ if __name__ == '__main__':
         vdd_driver=args.vdd_driver,
         file_exists=args.exists,
         sums_only=args.sums_only,
+        live_fps=args.live_fps,
     )
