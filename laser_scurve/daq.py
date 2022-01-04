@@ -31,7 +31,7 @@ def _decode_responses(
         _, block_frames = decode_column_packets(response.data, setup.pixel_columns, setup.chip.bits_adder, setup.chip.bits_counter)
         block_frames = (ctr_max - block_frames) % ctr_max  # counter counts down
         block_frames = block_frames.reshape(-1, setup.pixel_rows, setup.pixel_columns)
-        
+        block_frames = np.sum(block_frames, axis=0)
         frames.append(block_frames)
     
 def measure_laser_scurves(
@@ -113,7 +113,4 @@ def measure_laser_scurves(
 
     ############################################################################
     
-    return np.reshape(
-        np.hstack(frames),
-        (-1, ro.setup.pixel_rows, ro.setup.pixel_columns),
-    )
+    return np.array(frames).astype(np.uint32)
