@@ -10,6 +10,8 @@ class ReadoutBoardConfig:
     default_hv_driver: str
     default_vdd_driver: str
     default_vssa_driver: str
+    laser_port: str
+    motion_port: str
 
 @dataclass
 class HitpixReadoutConfig:
@@ -61,11 +63,15 @@ def load_config() -> HitpixReadoutConfig:
         default_hv_driver = conf_section.get('default_hv_driver', 'manual')
         default_vdd_driver = conf_section.get('default_vdd_driver', 'manual')
         default_vssa_driver = conf_section.get('default_vssa_driver', 'manual')
+        motion_port = conf_section.get('motion_port', '')
+        laser_port = conf_section.get('laser_port', '')
         boards[section] = ReadoutBoardConfig(
             fastreadout_serial,
             default_hv_driver,
             default_vdd_driver=default_vdd_driver,
             default_vssa_driver=default_vssa_driver,
+            motion_port=motion_port,
+            laser_port=laser_port,
         )
 
     return HitpixReadoutConfig(

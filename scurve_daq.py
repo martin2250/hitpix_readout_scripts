@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 from typing import Literal
 
-from hitpix import HitPixSetup
-
 def __get_config_dict_ext() -> dict:
     return {
         'pulse_us': 2.5,
