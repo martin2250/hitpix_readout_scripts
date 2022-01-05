@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import time
 import json
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 class VoltageChannel(ABC):
     @abstractmethod
@@ -69,6 +69,30 @@ class Keithley2400VoltageChannel(VoltageChannel):
     def shutdown(self) -> None:
         self.smu.shutdown()
 
+class KeysightB2901aVoltageChannel(VoltageChannel):
+    def __init__(self, name: str, config: dict) -> None:
+        super().__init__()
+        self.invert = config['invert']
+        self.name = name
+        self._voltage = float('nan')
+        import pyvisa
+        rm = pyvisa.ResourceManager('/usr/lib/librsvisa.so')
+        # 'Resource' does not contain 'write' method and pylance complains...
+        self.instr = cast(Any, rm.open_resource(config['visa_path']))
+    
+    def set_voltage(self, voltage: float) -> bool:
+        if self.invert:
+            voltage = -voltage
+        if self._voltage == voltage:
+            return False
+        self.instr.write(f'outp:stat 1')
+        self.instr.write(f'sour:volt {voltage:0.3f}')
+        return True
+    
+    def shutdown(self) -> None:
+        self.instr.write(f'outp:stat 0')
+
+
 class HMP4040:
     devices: ClassVar[dict[str, 'HMP4040']] = {}
 
@@ -115,6 +139,7 @@ class HMP4040VoltageChannel(VoltageChannel):
 voltage_channels = {
     'manual': ManualVoltageChannel,
     'keithley2400': Keithley2400VoltageChannel,
+    'keysightb2901a': KeysightB2901aVoltageChannel,
     'hmp4040': HMP4040VoltageChannel,
 }
 
