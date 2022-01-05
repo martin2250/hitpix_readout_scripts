@@ -158,6 +158,7 @@ def main(
     else:
         util.gridscan.apply_set(config_dict_template, args_set)
         config = config_from_dict(config_dict_template)
+        set_voltages(config)
 
         res = measure_scurves(ro, fastreadout, config,
                                 read_noise, tqdm.tqdm(dynamic_ncols=True))
