@@ -206,6 +206,7 @@ def main(
                     (setup.pixel_rows, setup.pixel_columns), np.int64)
 
                 import matplotlib.pyplot as plt
+                from matplotlib.colors import LogNorm
                 _, (ax_frame, ax_total) = cast(Any, plt.subplots(1, 2))
                 image_frame = ax_frame.imshow(hits)
                 image_total = ax_total.imshow(hits)
@@ -221,8 +222,8 @@ def main(
                     plt.pause(plot_pause)
                     try:
                         hits_new = q_hits.get_nowait()
-                        image_frame.set_data(hits_new)
-                        image_frame.set_clim(0, np.max(hits_new))
+                        image_frame.set_data(hits_new + 1)
+                        image_frame.set_norm(LogNorm(vmin=1, vmax=np.max(hits_new)))
                         hits += hits_new
                         plot_total_us += plot_frame_us
                         image_total.set_data(hits)
