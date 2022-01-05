@@ -1,3 +1,4 @@
+from typing import Iterable
 import h5py
 from dataclasses import dataclass
 import numpy as np
@@ -100,3 +101,6 @@ def apply_set(param_dict: dict, args_set: list[str]) -> None:
             exec(f'{name} = type({name})({value})', param_dict)
         except NameError:
             exec(f'{name} = {value}', param_dict)
+
+def group_name(prefix: str, scan_idx: Iterable[int]) -> str:
+    return prefix + ''.join(f'_{i}' for i in scan_idx)
