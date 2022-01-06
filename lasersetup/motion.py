@@ -158,11 +158,45 @@ class MotorStage:
             self.wait_on_target()
 
     def move_to(self, x: float, y: float, z: float, wait: bool = False):
-        self.axis_x.move_to(x, wait=False)
-        self.axis_y.move_to(y, wait=False)
-        self.axis_z.move_to(z, wait=False)
-        if wait:
-            self.wait_on_target()
+        pos_new = [x, y, z]
+        # which axes need to be moved?
+        axis_needs_to_move = [
+            ax.position != pn
+            for ax, pn in zip(self.axes, pos_new)
+        ]
+        axis_moving = [False for _ in pos_new]
+        # perform backlash compensation
+        for i, axis in enumerate(self.axes):
+            if not axis_needs_to_move[i]:
+                continue
+            pos_diff = pos_new[i] - axis.position
+            # approaching from wrong side?
+            if (pos_diff > 0) != (axis.backlash > 0):
+                # overshoot target a bit
+                axis.move_to_raw(pos_new[i] - axis.backlash)
+                axis_moving[i] = True
+            else:
+                # move to target directly
+                axis.move_to_raw(pos_new[i])
+                axis_needs_to_move[i] = False
+                axis_moving[i] = True
+        # wait on axes that had backlash compensated
+        for i, axis in enumerate(self.axes):
+            if not axis_needs_to_move[i]:
+                continue
+            axis.wait_on_target()
+        # move to actual position
+        for i, axis in enumerate(self.axes):
+            if not axis_needs_to_move[i]:
+                continue
+            axis.move_to_raw(pos_new[i])
+        # wait on target
+        if not wait:
+            return
+        for i, axis in enumerate(self.axes):
+            if not axis_moving:
+                continue
+            axis.wait_on_target()
 
 def load_motion(port: PiSerial | serial.Serial | str) -> MotorStage:
     '''stage must be initialized afterwards!'''
