@@ -1,4 +1,5 @@
 import enum
+import threading
 
 import serial
 
@@ -7,18 +8,19 @@ class NktPiLaser:
     def __init__(self, port_name: str) -> None:
         self.port = serial.Serial(port_name, 19200)
         self.port.timeout = 0.5
+        self.lock = threading.Lock()
 
     ############################################################################
 
     def query(self, command: str, expect_lines: int = 1) -> list[str]:
         command = command + '\r\n'
-        self.port.write(command.encode())
-        self.port.flushOutput()
-        response = [
-            self.port.readline().decode().strip()
-            for _ in range(expect_lines)
-        ]
-        return response
+        with self.lock:
+            self.port.write(command.encode())
+            self.port.flushOutput()
+            return [
+                self.port.readline().decode().strip()
+                for _ in range(expect_lines)
+            ]
 
     def write(self, command: str):
         '''query and expect "done" as reply'''
@@ -35,19 +37,33 @@ class NktPiLaser:
 
     def get_version(self) -> list[str]:
         return self.query('version?', 8)
+    
+    def get_commands(self) -> list[str]:
+        with self.lock:
+            self.port.write(b'help?\r\n')
+            self.port.flushOutput()
+            commands = []
+            while c := self.port.readline():
+                commands.append(c.decode().strip())
+            return commands
 
     ############################################################################
 
     @property
     def state(self) -> bool:
-        resp, = self.query('ld?')
+        prefix, value = self.read('ld?')
         # pulsed laser emission: on
         # pulsed laser emission: off
-        return resp.endswith('on')
+        assert prefix == 'pulsed laser emission', prefix
+        return value == 'on'
 
     @state.setter
     def state(self, state_new: bool) -> None:
         self.write(f'ld={int(state_new)}')
+    
+    def try_enable(self) -> bool:
+        resp, = self.query('ld=1')
+        return resp == 'done'
 
     ############################################################################
 
@@ -145,3 +161,11 @@ class NktPiLaser:
     def trigger_level(self, value: float) -> None:
         assert value > -4.8 and value < 4.8
         self.write(f'tl={int(value*1000)}')
+
+    ############################################################################
+    
+    # @property
+    # def interlock(self) -> bool:
+    #     prefix, value = self.read('TODO?')
+    #     print(prefix, value)
+    #     return True
