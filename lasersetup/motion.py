@@ -1,6 +1,7 @@
 import enum
 import logging
 import time
+from typing import Optional, cast
 
 import serial
 
@@ -157,8 +158,18 @@ class MotorStage:
         if wait:
             self.wait_on_target()
 
-    def move_to(self, x: float, y: float, z: float, wait: bool = False):
+    def move_to(
+        self,
+        x: Optional[float] = None,
+        y: Optional[float] = None, 
+        z: Optional[float] = None,
+        wait: bool = False,
+    ) -> None:
         pos_new = [x, y, z]
+        pos_new = [
+            ax.position if pos is None else pos
+            for pos, ax in zip(pos_new, self.axes)
+        ]
         # which axes need to be moved?
         axis_needs_to_move = [
             ax.position != pn
@@ -197,6 +208,11 @@ class MotorStage:
             if not axis_moving:
                 continue
             axis.wait_on_target()
+    
+    @property
+    def position(self) -> tuple[float, float, float]:
+        pos = tuple(ax.position for ax in self.axes)
+        return cast(tuple[float, float, float], pos)
 
 def load_motion(port: PiSerial | serial.Serial | str) -> MotorStage:
     '''stage must be initialized afterwards!'''
