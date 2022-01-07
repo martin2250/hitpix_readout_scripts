@@ -234,19 +234,7 @@ class Readout:
         )
     
     def wait_sm_idle(self, timeout: float = 1.) -> None:
-        t_start = time.perf_counter()
-        ncalls = 1
-
         t_timeout = time.monotonic() + timeout
         while self.get_sm_status().active:
-            ncalls += 1
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
-        
-        t_end = time.perf_counter()
-        t_diff = (t_end - t_start) * 1e3
-
-        print(f'wait_sm_idle {t_diff=}ms {ncalls=}')
-
-
-
