@@ -173,7 +173,7 @@ class Readout:
         self.write_register(self.ADDR_SM_INJECTION_CTRL, (on_cycles - 1) | ((off_cycles - 1) << 16))
     
     def _write_function_card_raw(self, data: bytes) -> None:
-        self._expect_response()#
+        self._expect_response()
         self.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
     
     def initialize(self) -> None:
@@ -192,14 +192,26 @@ class Readout:
             print('-' * len(msg))
             raise err
 
+    # # slow version (two calls to send_packet)
+    # def write_function_card(self, slot_id: int, data: bytes) -> None:
+    #     assert slot_id in range(8)
+    #     # set CS low
+    #     mask = (~(1 << (7 - slot_id))) & 0xff # shift register outputs are swapped on gecco
+    #     self._write_function_card_raw(bytes([mask]))
+    #     # write data and set CS high
+    #     self._write_function_card_raw(data + b'\xff')
+
     def write_function_card(self, slot_id: int, data: bytes) -> None:
         assert slot_id in range(8)
         # set CS low
         mask = (~(1 << (7 - slot_id))) & 0xff # shift register outputs are swapped on gecco
-        self._write_function_card_raw(bytes([mask]))
-        # write data and set CS high
-        self._write_function_card_raw(data + b'\xff')
-
+        packets = [
+            bytes([self.CMD_FUNCTION_CARD, mask]), # enable cs line for this slot
+            bytes([self.CMD_FUNCTION_CARD]) + data + b'\xff', # write data and set CS high
+        ]
+        for _ in packets:
+            self._expect_response()
+        self.send_packets(packets)
     
     @dataclass
     class SmStatus:
@@ -222,10 +234,19 @@ class Readout:
         )
     
     def wait_sm_idle(self, timeout: float = 1.) -> None:
+        t_start = time.perf_counter()
+        ncalls = 1
+
         t_timeout = time.monotonic() + timeout
         while self.get_sm_status().active:
+            ncalls += 1
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
+        
+        t_end = time.perf_counter()
+        t_diff = (t_end - t_start) * 1e3
+
+        print(f'wait_sm_idle {t_diff=}ms {ncalls=}')
 
 
 

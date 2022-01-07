@@ -11,6 +11,7 @@ import tqdm
 from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent, KeyEvent
 from matplotlib.widgets import Slider
+from matplotlib.colors import LogNorm
 
 import scurve.analysis
 import laser_scurve.io
@@ -186,23 +187,19 @@ if __name__ == '__main__':
 
     # plot raw frames
     def raw_frame_data() -> np.ndarray:
-        # data = frames[idx_sliders[:-2]]
-        # return np.log(np.sum(data, axis=-1) + 1.0)
         axes_sum = list(range(frames.ndim))
         del axes_sum[-2]
         del axes_sum[-2]
-        return np.log(1. + np.sum(frames, axis=tuple(axes_sum)))
+        return np.log(1. + np.std(frames, axis=tuple(axes_sum)))
 
-    im_raw_frame = ax_rawframe.imshow(raw_frame_data())
+    im_raw_frame = ax_rawframe.imshow(
+        raw_frame_data(),
+        norm=LogNorm(),
+    )
     ax_rawframe.set_title('Raw Sensor Hits')
     ax_rawframe.set_xlabel('pixel_x')
     ax_rawframe.set_ylabel('pixel_y')
     fig.colorbar(im_raw_frame, ax=ax_rawframe)
-
-    def raw_frame_redraw():
-        data = raw_frame_data()
-        im_raw_frame.set_data(data)
-        im_raw_frame.set_clim(0, np.max(data))
 
     # plot images
     def image_take(source: np.ndarray) -> np.ndarray:
@@ -303,7 +300,6 @@ if __name__ == '__main__':
             return
         idx_sliders = idx_new
         images_redraw()
-        raw_frame_redraw()
         curve_redraw()
 
     for slider in sliders:

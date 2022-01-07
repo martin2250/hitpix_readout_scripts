@@ -3,6 +3,7 @@
 from typing import Any, Literal, cast
 import hitpix.defaults
 
+
 def __get_config_dict_ext() -> dict:
     config = {
         'hv': 5.0,
@@ -157,7 +158,6 @@ def main(
         util.gridscan.save_scan(group_scan, scan_parameters)
         # nested progress bars
         prog_scan = tqdm.tqdm(total=math.prod(scan_shape), dynamic_ncols=True)
-        prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
         # scan over all possible combinations
         for idx in np.ndindex(*scan_shape):
             # check if this measurement is already present in file
@@ -177,20 +177,21 @@ def main(
 
             # prepare measurement
             motion.move_to(*config.position, wait=False)
-            prog_scan.set_postfix(pos=','.join(f'{p:0.2f}' for p in config.position))
+            prog_scan.set_postfix(pos=','.join(
+                f'{p:0.2f}' for p in config.position))
             set_voltages(config)
             ro.sm_abort()
             motion.wait_on_target()
 
             # repeat measurement when laser is not on after the measurement
             while True:
-                prog_meas.reset()
                 if not laser.state:
-                    prog_meas.write('laser not on, waiting for lid to close...')
+                    prog_scan.write(
+                        'laser not on, waiting for lid to close...')
                     while True:
                         try:
                             laser.state = True
-                            prog_meas.write('lid was closed, continuing')
+                            prog_scan.write('lid was closed, continuing')
                             break
                         except RuntimeError:
                             time.sleep(0.1)
@@ -200,14 +201,12 @@ def main(
                     ro=ro,
                     fastreadout=fastreadout,
                     config=config,
-                    progress=prog_meas,
                 )
 
                 if laser.state:
                     break
 
-                prog_meas.write('lid was opened, repeating measurement')
-
+                prog_scan.write('lid was opened, repeating measurement')
 
             # store measurement
             group = file.create_group(group_name)
