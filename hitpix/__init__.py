@@ -31,6 +31,7 @@ class HitPixVersion:
     columns: int
     bits_counter: int
     encode_column_config: Callable[[HitPixColumnConfig], bitarray.bitarray]
+    version_number: int
 
     @property
     def bits_adder(self) -> int:
@@ -43,6 +44,7 @@ class HitPixSetup:
     chip_rows: int  # should always be 1 for now
     chip_columns: int
     invert_pins: int
+    version_number: int
 
     vc_baseline: tuple[int, int]  # card slot, channel
     vc_threshold: tuple[int, int]  # card slot, channel
@@ -102,6 +104,7 @@ hitpix1 = HitPixVersion(
     columns=24,
     bits_counter=8,
     encode_column_config=encode_column_config_hitpix1,
+    version_number=1,
 )
 
 hitpix1_single = HitPixSetup(
@@ -110,6 +113,7 @@ hitpix1_single = HitPixSetup(
     chip_columns=1,
     invert_pins=bitfield(ReadoutPins.ro_ldconfig, ReadoutPins.dac_ld,
                          ReadoutPins.dac_inv_ck, ReadoutPins.ro_inv_ck),
+    version_number=1,
     vc_baseline=(0, 4),
     vc_threshold=(0, 1),
     vc_injection=(2, 0),
@@ -148,6 +152,7 @@ hitpix2 = HitPixVersion(
     columns=48,
     bits_counter=8,
     encode_column_config=encode_column_config_hitpix2,
+    version_number=2,
 )
 
 hitpix2_single = HitPixSetup(
@@ -156,6 +161,7 @@ hitpix2_single = HitPixSetup(
     chip_columns=1,
     invert_pins=bitfield(ReadoutPins.ro_ldconfig, ReadoutPins.dac_ld,
                          ReadoutPins.dac_inv_ck, ReadoutPins.ro_inv_ck),
+    version_number=1,
     vc_baseline=(0, 4),
     vc_threshold=(0, 1),
     vc_injection=(2, 0),
@@ -167,6 +173,7 @@ hitpix2_row = HitPixSetup(
     chip_columns=5,
     invert_pins=bitfield(ReadoutPins.ro_ldconfig, ReadoutPins.dac_ld,
                          ReadoutPins.dac_inv_ck, ReadoutPins.ro_inv_ck),
+    version_number=2,
     vc_baseline=(-1, -1),
     vc_threshold=(-1, -1),
     vc_injection=(-1, -1),

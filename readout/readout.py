@@ -28,6 +28,7 @@ class Readout:
     ADDR_SM_STATUS         = 0x10
     ADDR_SM_INJECTION_CTRL = 0x11
     ADDR_SM_INVERT_PINS    = 0x12
+    ADDR_VERSION           = 0xf0
 
     class ReadoutError(Exception):
         # error codes
@@ -238,3 +239,19 @@ class Readout:
         while self.get_sm_status().active:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
+    
+    ############################################################################
+
+    @dataclass
+    class VersionInfo:
+        chip: int
+        adapter: int
+        readout: int
+
+    def get_version(self) -> VersionInfo:
+        raw = self.read_register(self.ADDR_VERSION)
+        return self.VersionInfo(
+            chip=(raw >> 24) & 0xff,
+            adapter=(raw >> 16) & 0xff,
+            readout=(raw >> 0) & 0xffff,
+        )
