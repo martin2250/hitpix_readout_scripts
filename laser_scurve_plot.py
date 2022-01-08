@@ -143,9 +143,9 @@ if __name__ == '__main__':
 
     # plot layout
     ax_rawframe = fig.add_subplot(gs[0, 0])
-    ax_thresh = fig.add_subplot(gs[0, 1])
+    ax_hits = fig.add_subplot(gs[0, 1])
     ax_curve = fig.add_subplot(gs[0, 2])
-    ax_hits = fig.add_subplot(gs[1, 0])
+    ax_thresh = fig.add_subplot(gs[1, 0])
     ax_noise = fig.add_subplot(gs[1, 1])
     gs_sliders = gs[1, 2]
 
@@ -199,17 +199,14 @@ if __name__ == '__main__':
     else:
         range_threshold = range_noise = 0, 1
 
-    # # plot raw frames
-    # def rawframe_data_get() -> np.ndarray:
-    #     axes_sum = list(range(frames.ndim))
-    #     del axes_sum[-2]
-    #     del axes_sum[-2]
-    #     return np.log(1. + np.std(frames, axis=tuple(axes_sum)))
+    ############################################################################
+    # plot raw frames
 
     im_raw_frame = ax_rawframe.imshow(
         np.ones(frames.shape[-3:-1]),
         norm=LogNorm(),
     )
+    rawframe_pixel_line, = ax_rawframe.plot([0], [0], 'rx')
     ax_rawframe.set_xlabel('pixel_x')
     ax_rawframe.set_ylabel('pixel_y')
     fig.colorbar(im_raw_frame, ax=ax_rawframe)
@@ -345,6 +342,8 @@ if __name__ == '__main__':
         idx_sliders = idx_new
         images_redraw()
         curve_redraw()
+        rawframe_pixel_line.set_xdata([idx_sliders[-1]])
+        rawframe_pixel_line.set_ydata([idx_sliders[-2]])
 
     for slider in sliders:
         slider.on_changed(slider_on_changed)
