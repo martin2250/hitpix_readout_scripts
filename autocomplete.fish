@@ -6,3 +6,4 @@ register-python-argcomplete --shell fish frames_plot.py --external-argcomplete-s
 register-python-argcomplete --shell fish ampout_snr_daq.py --external-argcomplete-script ./ampout_snr_daq.py | source
 register-python-argcomplete --shell fish ampout_snr_plot.py --external-argcomplete-script ./ampout_snr_plot.py | source
 register-python-argcomplete --shell fish laser_scurve_daq.py --external-argcomplete-script ./laser_scurve_daq.py | source
+register-python-argcomplete --shell fish laser_scurve_plot.py --external-argcomplete-script ./laser_scurve_plot.py | source

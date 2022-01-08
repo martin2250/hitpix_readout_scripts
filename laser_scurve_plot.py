@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
 from matplotlib.axes import Axes
-from matplotlib.backend_bases import MouseEvent, KeyEvent
+from matplotlib.backend_bases import MouseEvent, KeyEvent, MouseButton
 from matplotlib.widgets import Slider
 from matplotlib.colors import LogNorm
 
@@ -42,6 +42,12 @@ if __name__ == '__main__':
         help='h5 input file',
     )
 
+    parser.add_argument(
+        '--no_fit',
+        action='store_true',
+        help='do not fit curves (no threshold/noise map)',
+    )
+
     try:
         import argcomplete
         from argcomplete.completers import FilesCompleter
@@ -70,6 +76,7 @@ if __name__ == '__main__':
         # create full data array
         frames = np.zeros(scan_shape + frames_first.shape)
         # store remaining scurves
+        print('reading file')
         for idx in np.ndindex(*scan_shape):
             group_scurve = file[util.gridscan.group_name(prefix, idx)]
             assert isinstance(group_scurve, h5py.Group)
@@ -92,38 +99,42 @@ if __name__ == '__main__':
     frames = np.moveaxis(frames, -3, -1)
     efficiency = frames / config.injections_total
 
+    print(f'{frames.shape=} {frames.size=}')
+
     # result arrays
     threshold, noise = np.zeros(frames.shape[:-1]), np.zeros(frames.shape[:-1])
 
-    # fit sigmoid expects higher efficiency for  higher x
-    offset_voltage = 4.2
-    mock_injection_voltage = offset_voltage - config.threshold_offsets
-    # reverse to make array ascending
-    mock_injection_voltage = mock_injection_voltage[::-1]
+    if not args.no_fit:
+        print('fitting curves')
+        # fit sigmoid expects higher efficiency for  higher x
+        offset_voltage = 4.2
+        mock_injection_voltage = offset_voltage - config.threshold_offsets
+        # reverse to make array ascending
+        mock_injection_voltage = mock_injection_voltage[::-1]
 
-    # use process for each pixel column -> not too many processes
-    def fit_job(index_x: int) -> tuple[np.ndarray, np.ndarray]:
-        res_th = np.zeros(frames.shape[:-2])
-        res_no = np.zeros(frames.shape[:-2])
-        for idx in np.ndindex(*frames.shape[:-2]):
-            efficiency_loc = efficiency[idx + (index_x,)]
-            t, w = scurve.analysis.fit_sigmoid(
-                mock_injection_voltage,
-                efficiency_loc[::-1],  # also reverse here
-            )
-            res_th[idx] = offset_voltage - t
-            res_no[idx] = w
-        return res_th, res_no
+        # use process for each pixel column -> not too many processes
+        def fit_job(index_x: int) -> tuple[np.ndarray, np.ndarray]:
+            res_th = np.zeros(frames.shape[:-2])
+            res_no = np.zeros(frames.shape[:-2])
+            for idx in np.ndindex(*frames.shape[:-2]):
+                efficiency_loc = efficiency[idx + (index_x,)]
+                t, w = scurve.analysis.fit_sigmoid(
+                    mock_injection_voltage,
+                    efficiency_loc[::-1],  # also reverse here
+                )
+                res_th[idx] = offset_voltage - t
+                res_no[idx] = w
+            return res_th, res_no
 
-    results = ProcessPoolExecutor().map(fit_job, range(frames.shape[-2]))
+        results = ProcessPoolExecutor().map(fit_job, range(frames.shape[-2]))
 
-    # store in final results array
-    for index_x, result in tqdm.tqdm(
-        enumerate(results),
-        total=frames.shape[-2],
-        dynamic_ncols=True,
-    ):
-        threshold[(..., index_x)], noise[(..., index_x)] = result
+        # store in final results array
+        for index_x, result in tqdm.tqdm(
+            enumerate(results),
+            total=frames.shape[-2],
+            dynamic_ncols=True,
+        ):
+            threshold[(..., index_x)], noise[(..., index_x)] = result
 
     ############################################################################
 
@@ -182,24 +193,57 @@ if __name__ == '__main__':
         (noise < 1000)
     ]
 
-    range_threshold = np.min(threshold_clean), np.max(threshold_clean)
-    range_noise = np.min(noise_clean), np.max(noise_clean)
+    if not args.no_fit:
+        range_threshold = np.min(threshold_clean), np.max(threshold_clean)
+        range_noise = np.min(noise_clean), np.max(noise_clean)
+    else:
+        range_threshold = range_noise = 0, 1
 
-    # plot raw frames
-    def raw_frame_data() -> np.ndarray:
-        axes_sum = list(range(frames.ndim))
-        del axes_sum[-2]
-        del axes_sum[-2]
-        return np.log(1. + np.std(frames, axis=tuple(axes_sum)))
+    # # plot raw frames
+    # def rawframe_data_get() -> np.ndarray:
+    #     axes_sum = list(range(frames.ndim))
+    #     del axes_sum[-2]
+    #     del axes_sum[-2]
+    #     return np.log(1. + np.std(frames, axis=tuple(axes_sum)))
 
     im_raw_frame = ax_rawframe.imshow(
-        raw_frame_data(),
+        np.ones(frames.shape[-3:-1]),
         norm=LogNorm(),
     )
-    ax_rawframe.set_title('Raw Sensor Hits')
     ax_rawframe.set_xlabel('pixel_x')
     ax_rawframe.set_ylabel('pixel_y')
     fig.colorbar(im_raw_frame, ax=ax_rawframe)
+    rawframe_idx = 0
+
+    rawframe_data = np.sum(frames, axis=-1)
+
+    def rawframe_update():
+        global rawframe_idx
+        # which axes should be reduced?
+        axes_sum = tuple(range(rawframe_data.ndim - 2))
+        data_new = None
+        # which visualization?
+        match rawframe_idx:
+            case 0:
+                data_new = np.max(rawframe_data, axis=axes_sum) - np.min(rawframe_data, axis=axes_sum)
+                ax_rawframe.set_title('Raw Sensor Hits (max-min)')
+            case 1:
+                data_new = np.sum(rawframe_data, axis=axes_sum)
+                ax_rawframe.set_title('Raw Sensor Hits (sum)')
+            case 2:
+                data_new = np.std(rawframe_data, axis=axes_sum)
+                ax_rawframe.set_title('Raw Sensor Hits (std)')
+        # update plot
+        assert data_new is not None
+        data_new += 1.
+        im_raw_frame.set_data(data_new)
+        im_raw_frame.set_norm(LogNorm(np.min(data_new), np.max(data_new)))
+        
+        rawframe_idx += 1
+        if rawframe_idx > 2:
+            rawframe_idx = 0
+
+    rawframe_update()
 
     # plot images
     def image_take(source: np.ndarray) -> np.ndarray:
@@ -308,16 +352,19 @@ if __name__ == '__main__':
     def button_press_event(event: MouseEvent):
         global idx_sliders
         if event.inaxes == ax_rawframe:
-            pixel_new = tuple(map(
-                lambda p: int(p + 0.5),
-                (event.xdata, event.ydata),
-            ))
-            if pixel_new == idx_sliders[-2:]:
-                return
-            idx_sliders = idx_sliders[:-2] + pixel_new
-            sliders[-1].set_val(pixel_new[0])
-            sliders[-2].set_val(pixel_new[1])
-            images_redraw()
+            if event.button is MouseButton.LEFT:
+                pixel_new = tuple(map(
+                    lambda p: int(p + 0.5),
+                    (event.xdata, event.ydata),
+                ))
+                if pixel_new == idx_sliders[-2:]:
+                    return
+                idx_sliders = idx_sliders[:-2] + pixel_new
+                sliders[-1].set_val(pixel_new[0])
+                sliders[-2].set_val(pixel_new[1])
+                images_redraw()
+            else:
+                rawframe_update()
             return
         if event.inaxes in (ax_thresh, ax_noise, ax_hits):
             idx_x_new = int(np.argmin(np.abs(
@@ -351,11 +398,11 @@ if __name__ == '__main__':
             # update axes
             if event.key == 'x':
                 if i_slider == im_axis_idx_y:
-                    return
+                    im_axis_idx_y = im_axis_idx_x
                 im_axis_idx_x = i_slider
             if event.key == 'y':
                 if i_slider == im_axis_idx_x:
-                    return
+                    im_axis_idx_x = im_axis_idx_y
                 im_axis_idx_y = i_slider
             print(
                 f'set {event.key.upper()} axis to {scan_parameters[i_slider].name}')
