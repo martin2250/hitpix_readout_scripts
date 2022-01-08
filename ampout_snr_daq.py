@@ -48,6 +48,7 @@ def main(
     import util.gridscan
     import util.lecroy
     import util.voltage_channel
+    import util.helpers
     from ampout_snr.io import AmpOutSnrConfig, save_ampout_snr
     from hitpix.dac import HitPixDacConfig
     from hitpix.readout import HitPixReadout
@@ -81,23 +82,9 @@ def main(
         )
 
     ############################################################################
-
+    
     path_output = Path(output_file)
-    if path_output.exists():
-        if file_exists == 'ask':
-            try:
-                res = input(
-                    f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
-            except KeyboardInterrupt:
-                exit()
-            if res.lower() == 'd':
-                path_output.unlink()
-            elif res.lower() != 'c':
-                exit()
-        elif file_exists == 'delete':
-            path_output.unlink()
-        elif file_exists != 'continue':
-            exit()
+    util.helpers.check_output_exists(path_output, file_exists)
 
     ############################################################################
     # open readout

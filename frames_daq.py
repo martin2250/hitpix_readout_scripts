@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from sys import path
 from typing import Literal, Optional, cast, Any
 
 
@@ -38,6 +39,7 @@ def main(
     import hitpix.defaults
     import util.configuration
     import util.gridscan
+    import util.helpers
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
@@ -75,21 +77,7 @@ def main(
     ############################################################################
 
     path_output = Path(output_file)
-    if path_output.exists():
-        if file_exists == 'ask':
-            try:
-                res = input(
-                    f'file {path_output} exists, [d]elete , [c]ontinue or [N] abort? (d/c/N): ')
-            except KeyboardInterrupt:
-                exit()
-            if res.lower() == 'd':
-                path_output.unlink()
-            elif res.lower() != 'c':
-                exit()
-        elif file_exists == 'delete':
-            path_output.unlink()
-        elif file_exists != 'continue':
-            exit()
+    util.helpers.check_output_exists(path_output, file_exists)
 
     ############################################################################
     # open readout
