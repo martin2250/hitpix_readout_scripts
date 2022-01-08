@@ -23,7 +23,7 @@ class LaserScurveConfig:
     injection_pause_us: float
     position: tuple[float, float, float]
     shift_clk_div: int = 0
-    injection_delay: float = 0.01  # DACs needs around 3ms
+    injection_delay: float = 0.005  # DACs needs around 3ms
 
     def asdict(self) -> dict:
         d = dataclasses.asdict(self)
