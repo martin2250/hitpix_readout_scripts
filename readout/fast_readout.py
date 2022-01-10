@@ -21,6 +21,7 @@ class FastReadout:
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x40)
         self.ftdi.ftdi_fn.ftdi_setflowctrl(FT_FLOW_RTS_CTS, 0, 0)
         self.ftdi.ftdi_fn.ftdi_set_latency_timer(2)
+        self.ftdi.ftdi_fn.ftdi_read_data_set_chunksize(0x10000)
         for _ in range(3):
             time.sleep(50e-3)
             self.ftdi.ftdi_fn.ftdi_usb_purge_rx_buffer()
@@ -40,7 +41,7 @@ class FastReadout:
         buffer = bytearray()
         n_tot = 0
         while not self.event_stop.is_set():
-            data_new = self.ftdi.read(1 << 20)
+            data_new = self.ftdi.read(3968 * 8192) # see AN232B-03 Optimising D2XX Data Throughput
             if not isinstance(data_new, bytes) or not data_new:
                 time.sleep(0.001)
                 continue
