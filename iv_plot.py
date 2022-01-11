@@ -15,6 +15,11 @@ a_input_file = parser.add_argument(
     help='h5 input files',
 )
 
+parser.add_argument(
+    '--output',
+    help='plot output file',
+)
+
 try:
     import argcomplete
     from argcomplete.completers import FilesCompleter
@@ -28,8 +33,15 @@ args = parser.parse_args()
 ################################################################################
 
 for path_in in args.input_file:
+    style = '--' if ('1.1' in path_in or '5e14' in path_in) else '-'
     path_in = Path(path_in)
     U, I = np.loadtxt(path_in, unpack=True)
-    plt.plot(U, I, label=path_in.name)
+    plt.plot(U, I * 1e6, style, label=path_in.name.removesuffix('-iv.txt'))
 plt.legend()
-plt.show()
+plt.xlabel('Depletion Voltage (V)')
+plt.ylabel('Leakage Current (µA)')
+
+if args.output is not None:
+    plt.savefig(args.output, dpi=300, transparent=True)
+else:
+    plt.show()

@@ -123,6 +123,8 @@ if __name__ == '__main__':
     fig = plt.gcf()
     gs = fig.add_gridspec(2, 3)
 
+    fig.suptitle(args.input_file)
+
     # plot layout
     ax_hthresh = fig.add_subplot(gs[0, 0])
     ax_hnoise = fig.add_subplot(gs[1, 0])

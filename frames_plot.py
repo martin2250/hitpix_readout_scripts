@@ -71,8 +71,11 @@ if __name__ == '__main__':
     # calculate pixel properties
 
     hits_frames = hits_frames.sum(axis=-3)
+    # convert to hits/s
+    hits_frames = hits_frames / (config.frame_length_us * config.num_frames * 1e-6)
 
     fig = plt.gcf()
+    fig.suptitle(args.input_file)
     gs = fig.add_gridspec(2, 2)
 
     # plot layout
@@ -123,7 +126,8 @@ if __name__ == '__main__':
     range_hits = range_hits_full
 
     # plot histograms
-    ax_hist.set_xlabel('Hits')
+    ax_hist.set_xlabel('Hits / Pixel / s')
+    ax_hist.set_ylabel('Pixels')
     _, bins_hits, bars_hits = ax_hist.hist(
         hits_frames[idx_scan].flat, bins=30, range=range_hits)
 
@@ -140,7 +144,7 @@ if __name__ == '__main__':
         vmin=range_hits[0],
         vmax=range_hits[1],
     )
-    ax_map.set_title('Hits')
+    ax_map.set_title('Hits / Pixel / s')
     fig.colorbar(im_hits, ax=ax_map)
 
     def redraw_maps():
@@ -148,7 +152,7 @@ if __name__ == '__main__':
 
     # plot scurve
     line_data, = ax_curve.plot([], [])
-    ax_curve.set_ylabel('Total Hits')
+    ax_curve.set_ylabel('Hits / s (all Pixels)')
     ax_curve.set_yscale('log')
 
     def redraw_curve():
@@ -211,7 +215,7 @@ if __name__ == '__main__':
         ax_hist.clear()
         _, bins_hits, bars_hits = ax_hist.hist(
             hits_frames[idx_scan].flat, bins=30, range=range_hits)
-        ax_hist.set_xlabel('Hits')
+        ax_hist.set_xlabel('Hits / Pixel / s')
 
     slider_range.on_changed(slider_range_onchanged)
 
