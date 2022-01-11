@@ -6,12 +6,12 @@ from typing import Optional, cast
 
 import h5py
 import numpy as np
-from hitpix.dac import HitPix1DacConfig
+import hitpix
 
 
 @dataclass
 class SCurveConfig:
-    dac_cfg: HitPix1DacConfig
+    dac_cfg: hitpix.HitPixDacConfig
     injection_voltage: np.ndarray
     injections_per_round: int
     injections_total: int
@@ -21,6 +21,7 @@ class SCurveConfig:
     voltage_vssa: float
     injection_pulse_us: float
     injection_pause_us: float
+    setup_name: str
     shift_clk_div: int = 0
     injection_delay: float = 0.01  # DACs needs around 3ms
 
@@ -32,7 +33,10 @@ class SCurveConfig:
 
     @staticmethod
     def fromdict(d: dict) -> 'SCurveConfig':
-        dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
+        if not 'setup_name' in d:
+            d['setup_name'] = 'hitpix1'
+        setup_name = d['setup']
+        dac_cfg = hitpix.setups[setup_name].chip.dac_config_class(**d['dac_cfg'])
         del d['dac_cfg']
         injection_voltage = np.array(d['injection_voltage'])
         del d['injection_voltage']

@@ -49,7 +49,6 @@ def main(
     import util.gridscan
     import util.helpers
     import util.voltage_channel
-    from hitpix.dac import HitPix1DacConfig
     from hitpix.readout import HitPixReadout
     from laser_scurve.io import LaserScurveConfig, save_laser_scurves
     from laser_scurve.daq import measure_laser_scurves
@@ -69,7 +68,7 @@ def main(
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': setup.chip.dac_config_class.default(),
     }
     config_dict_template.update(**__get_config_dict_ext())
 
@@ -88,6 +87,7 @@ def main(
             injection_pulse_us=scan_dict['pulse_us'],
             injection_pause_us=scan_dict['pause_us'],
             position=cast(Any, tuple(scan_dict[ax] for ax in 'xyz')),
+            setup_name=setup_name,
         )
 
     ############################################################################

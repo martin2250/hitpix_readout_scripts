@@ -104,7 +104,6 @@ if __name__ == '__main__':
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
-    from hitpix.dac import HitPix1DacConfig
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
     import signal
@@ -123,7 +122,7 @@ if __name__ == '__main__':
     setup = hitpix.setups[setup_name]
 
     config_dict: dict[str, Any] = {
-        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': setup.chip.dac_config_class.default(),
     }
     config_dict.update(**hitpix.defaults.voltages_default)
     config_dict.update(**__get_config_dict_ext())
@@ -153,7 +152,8 @@ if __name__ == '__main__':
             frame_length_us=config_dict['frame_us'],
             pause_length_us=config_dict['pause_us'],
             read_adders=False,
-            frames_per_run=frames_per_run
+            frames_per_run=frames_per_run,
+            setup_name=setup_name,
         )
 
     ############################################################################

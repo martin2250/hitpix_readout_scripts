@@ -6,12 +6,12 @@ from typing import Optional, cast
 
 import h5py
 import numpy as np
-from hitpix.dac import HitPix1DacConfig
+import hitpix
 
 
 @dataclass
 class LaserScurveConfig:
-    dac_cfg: HitPix1DacConfig
+    dac_cfg: hitpix.HitPixDacConfig
     threshold_offsets: np.ndarray
     injections_per_round: int
     injections_total: int
@@ -22,6 +22,7 @@ class LaserScurveConfig:
     injection_pulse_us: float
     injection_pause_us: float
     position: tuple[float, float, float]
+    setup_name: str
     shift_clk_div: int = 0
     injection_delay: float = 0.005  # DACs needs around 3ms
 
@@ -33,7 +34,10 @@ class LaserScurveConfig:
 
     @staticmethod
     def fromdict(d: dict) -> 'LaserScurveConfig':
-        dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
+        if not 'setup_name' in d:
+            d['setup_name'] = 'hitpix1'
+        setup_name = d['setup']
+        dac_cfg = hitpix.setups[setup_name].chip.dac_config_class(**d['dac_cfg'])
         del d['dac_cfg']
         threshold_offsets = np.array(d['threshold_offsets'])
         del d['threshold_offsets']
