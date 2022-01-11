@@ -35,7 +35,7 @@ class SCurveConfig:
     def fromdict(d: dict) -> 'SCurveConfig':
         if not 'setup_name' in d:
             d['setup_name'] = 'hitpix1'
-        setup_name = d['setup']
+        setup_name = d['setup_name']
         dac_cfg = hitpix.setups[setup_name].chip.dac_config_class(**d['dac_cfg'])
         del d['dac_cfg']
         injection_voltage = np.array(d['injection_voltage'])
