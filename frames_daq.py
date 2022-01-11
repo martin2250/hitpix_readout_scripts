@@ -43,7 +43,7 @@ def main(
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
-    from hitpix.dac import HitPixDacConfig
+    from hitpix.dac import HitPix1DacConfig
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
 
@@ -53,7 +53,7 @@ def main(
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
     config_dict_template.update(**__get_config_dict_ext())

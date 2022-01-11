@@ -6,12 +6,12 @@ from typing import Optional, cast
 
 import h5py
 import numpy as np
-from hitpix.dac import HitPixDacConfig
+from hitpix.dac import HitPix1DacConfig
 
 
 @dataclass
 class SCurveConfig:
-    dac_cfg: HitPixDacConfig
+    dac_cfg: HitPix1DacConfig
     injection_voltage: np.ndarray
     injections_per_round: int
     injections_total: int
@@ -32,7 +32,7 @@ class SCurveConfig:
 
     @staticmethod
     def fromdict(d: dict) -> 'SCurveConfig':
-        dac_cfg = HitPixDacConfig(**d['dac_cfg'])
+        dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
         del d['dac_cfg']
         injection_voltage = np.array(d['injection_voltage'])
         del d['injection_voltage']

@@ -130,17 +130,16 @@ def encode_column_config_hitpix2(conf: HitPixColumnConfig) -> bitarray.bitarray:
     assert conf.inject_row in range(1 << 48)
     assert conf.ampout_col in range(1 << 48)
 
-    raise NotImplementedError()
     b = bitarray.bitarray('0') * (14*48)
     b[8:14] = bitarray.util.int2ba(rowaddr, 6, endian='little')
     b[6::14] = bitarray.util.int2ba(conf.ampout_col, 48, endian='little')
     b[7::14] = bitarray.util.int2ba(conf.inject_col, 48, endian='little')
 
     b_inject_row = bitarray.util.int2ba(conf.inject_row, 48, endian='little')
-    for i in range(5):
-        i_cfg = 21 + 13 * i
-        i_inj = i * 5
-        inj_sub = b_inject_row[i_inj:i_inj+5]
+    for i in range(9):
+        i_cfg = 8 + 13 * (i + 1)
+        i_inj = i * 6
+        inj_sub = b_inject_row[i_inj:i_inj+6]
         b[i_cfg:i_cfg+len(inj_sub)] = inj_sub
 
     b.reverse()

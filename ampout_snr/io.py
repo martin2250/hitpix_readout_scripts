@@ -5,14 +5,14 @@ from dataclasses import dataclass
 
 import h5py
 import numpy as np
-from hitpix.dac import HitPixDacConfig
+from hitpix.dac import HitPix1DacConfig
 
 ################################################################################
 
 
 @dataclass
 class AmpOutSnrConfig:
-    dac_cfg: HitPixDacConfig
+    dac_cfg: HitPix1DacConfig
     voltage_baseline: float
     voltage_threshold: float
     voltage_vdd: float
@@ -29,7 +29,7 @@ class AmpOutSnrConfig:
 
     @staticmethod
     def fromdict(d: dict) -> 'AmpOutSnrConfig':
-        dac_cfg = HitPixDacConfig(**d['dac_cfg'])
+        dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
         del d['dac_cfg']
         return AmpOutSnrConfig(
             dac_cfg=dac_cfg,

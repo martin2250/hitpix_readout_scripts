@@ -104,7 +104,7 @@ if __name__ == '__main__':
     import util.voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frames
-    from hitpix.dac import HitPixDacConfig
+    from hitpix.dac import HitPix1DacConfig
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
     import signal
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     setup = hitpix.setups[setup_name]
 
     config_dict: dict[str, Any] = {
-        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict.update(**hitpix.defaults.voltages_default)
     config_dict.update(**__get_config_dict_ext())

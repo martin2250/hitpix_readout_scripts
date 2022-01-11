@@ -50,7 +50,7 @@ def main(
     import util.voltage_channel
     import util.helpers
     from ampout_snr.io import AmpOutSnrConfig, save_ampout_snr
-    from hitpix.dac import HitPixDacConfig
+    from hitpix.dac import HitPix1DacConfig
     from hitpix.readout import HitPixReadout
     import hitpix
     from readout.fast_readout import FastReadout
@@ -61,7 +61,7 @@ def main(
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
-        'dac': HitPixDacConfig(**hitpix.defaults.dac_default_hitpix1),
+        'dac': HitPix1DacConfig(**hitpix.defaults.dac_default_hitpix1),
     }
     config_dict_template.update(**hitpix.defaults.voltages_default)
     config_dict_template.update(**__get_config_dict_ext())

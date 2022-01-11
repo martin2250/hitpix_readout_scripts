@@ -6,12 +6,12 @@ from typing import Optional, cast
 
 import h5py
 import numpy as np
-from hitpix.dac import HitPixDacConfig
+from hitpix.dac import HitPix1DacConfig
 
 
 @dataclass
 class LaserScurveConfig:
-    dac_cfg: HitPixDacConfig
+    dac_cfg: HitPix1DacConfig
     threshold_offsets: np.ndarray
     injections_per_round: int
     injections_total: int
@@ -33,7 +33,7 @@ class LaserScurveConfig:
 
     @staticmethod
     def fromdict(d: dict) -> 'LaserScurveConfig':
-        dac_cfg = HitPixDacConfig(**d['dac_cfg'])
+        dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
         del d['dac_cfg']
         threshold_offsets = np.array(d['threshold_offsets'])
         del d['threshold_offsets']

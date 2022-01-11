@@ -6,13 +6,13 @@ import datetime
 import numpy as np
 from typing import cast
 
-from hitpix.dac import HitPixDacConfig
+from hitpix.dac import HitPix1DacConfig
 
 ################################################################################
 
 @dataclass
 class FrameConfig:
-    dac_cfg: HitPixDacConfig
+    dac_cfg: HitPix1DacConfig
     voltage_baseline: float
     voltage_threshold: float
     voltage_vdd: float
@@ -32,7 +32,7 @@ class FrameConfig:
 
     @staticmethod
     def fromdict(d: dict) -> 'FrameConfig':
-        dac_cfg = HitPixDacConfig(**d['dac_cfg'])
+        dac_cfg = HitPix1DacConfig(**d['dac_cfg'])
         del d['dac_cfg']
         # TODO: remove this, HV should always be set
         if not 'voltage_hv' in d:
