@@ -41,3 +41,9 @@ setups = [
     'hitpix2-1x1',
     'hitpix2-1x5',
 ]
+
+setup_dac_defaults = {
+    'hitpix1': dac_default_hitpix1,
+    'hitpix2-1x1': dac_default_hitpix2,
+    'hitpix2-1x5': dac_default_hitpix2,
+}

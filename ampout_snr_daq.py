@@ -246,19 +246,23 @@ if __name__ == '__main__':
 
     try:
         import argcomplete
-        from argcomplete.completers import ChoicesCompleter, FilesCompleter
+        from argcomplete.completers import FilesCompleter
 
-        import hitpix.defaults
-        choices_set = []
-        for name, value in hitpix.defaults.dac_default_hitpix1.items():
-            choices_set.append(f'dac.{name}={value}')
-        for name, value in hitpix.defaults.voltages_default.items():
-            choices_set.append(f'{name}={value}')
-        for name, value in __get_config_dict_ext().items():
-            choices_set.append(f'{name}={value}')
-        choices_scan = [value + ':' for value in choices_set]
-        setattr(a_set, 'completer', ChoicesCompleter(choices_set))
-        setattr(a_scan, 'completer', ChoicesCompleter(choices_scan))
+        def set_completer(prefix, parsed_args, **kwargs):
+            choices_set = []
+            for name, value in hitpix.defaults.voltages_default.items():
+                choices_set.append(f'{name}={value}')
+            for name, value in __get_config_dict_ext().items():
+                choices_set.append(f'{name}={value}')
+            for name, value in hitpix.defaults.setup_dac_defaults[parsed_args.setup].items():
+                choices_set.append(f'dac.{name}={value}')
+            return filter(lambda s: s.startswith(prefix), choices_set)
+        
+        def scan_completer(prefix, parsed_args, **kwargs):
+            return map(lambda s: s + ':', set_completer(prefix, parsed_args, **kwargs))
+
+        setattr(a_set, 'completer', set_completer)
+        setattr(a_scan, 'completer', scan_completer)
         setattr(a_output_file, 'completer', FilesCompleter('h5'))
         argcomplete.autocomplete(parser)
     except ImportError:
