@@ -4,7 +4,6 @@ from typing import Callable
 import bitarray
 import bitarray.util
 from dataclasses import dataclass
-from abc import ABC, abstractmethod, abstractstaticmethod
 
 
 class ReadoutPins(IntEnum):
@@ -26,16 +25,13 @@ class HitPixColumnConfig:
     ampout_col: int = 0
     rowaddr: int = -1 # -1 == select first non-existent row
 
-class HitPixDacConfig(ABC):
-    @abstractmethod
+class HitPixDacConfig:
     def __init__(self, **kwargs) -> None:
         raise NotImplementedError()
 
-    @abstractstaticmethod
     def default() -> 'HitPixDacConfig':
         raise NotImplementedError()
     
-    @abstractmethod
     def generate(self) -> bitarray.bitarray:
         raise NotImplementedError()
 
