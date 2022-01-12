@@ -29,6 +29,7 @@ class HitPixDacConfig:
     def __init__(self, **kwargs) -> None:
         raise NotImplementedError()
 
+    @staticmethod
     def default() -> 'HitPixDacConfig':
         raise NotImplementedError()
     
