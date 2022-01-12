@@ -57,17 +57,22 @@ def save_scan(group_scan: h5py.Group, scan_parameters: list[ParameterScan]) -> N
             group_scan.create_dataset(param.name, data=param.values)
 
 def parse_range(range_str: str) -> np.ndarray:
-    parts = range_str.split(':')
-    assert len(parts) in (3, 4)
-    start, stop = map(float, parts[:2])
-    count = int(parts[2])
-    scale = parts[3] if len(parts) == 4 else 'lin'
-    if scale in ('lin', 'linear'):
-        return np.linspace(start, stop, count)
-    elif scale in ('log', 'logarithmic'):
-        return np.geomspace(start, stop, count)
+    if range_str.startswith('['):
+        assert range_str.endswith(']')
+        parts = range_str[1:-1].split(',')
+        return np.array(float(p) for p in parts)
     else:
-        raise ValueError(f'{scale} is not a proper scale type')
+        parts = range_str.split(':')
+        assert len(parts) in (3, 4)
+        start, stop = map(float, parts[:2])
+        count = int(parts[2])
+        scale = parts[3] if len(parts) == 4 else 'lin'
+        if scale in ('lin', 'linear'):
+            return np.linspace(start, stop, count)
+        elif scale in ('log', 'logarithmic'):
+            return np.geomspace(start, stop, count)
+        else:
+            raise ValueError(f'{scale} is not a proper scale type')
 
 
 def parse_scan(args_scan: list[str]) -> tuple[list[ParameterScan], tuple[int, ...]]:
