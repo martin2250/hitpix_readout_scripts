@@ -23,7 +23,7 @@ class FrameConfig:
     pause_length_us: float
     read_adders: bool
     setup_name: str
-    shift_clk_div: int = 0
+    shift_clk_div: int = 1
     frames_per_run: int = 250
 
     def asdict(self) -> dict:
