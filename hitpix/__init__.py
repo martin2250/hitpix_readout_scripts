@@ -200,7 +200,7 @@ def encode_column_config_hitpix2(conf: HitPixColumnConfig) -> bitarray.bitarray:
 
     b_inject_row = bitarray.util.int2ba(conf.inject_row, 48, endian='little')
     for i in range(9):
-        i_cfg = 8 + 13 * (i + 1)
+        i_cfg = 8 + 14 * (i + 1)
         i_inj = i * 6
         inj_sub = b_inject_row[i_inj:i_inj+6]
         b[i_cfg:i_cfg+len(inj_sub)] = inj_sub
@@ -250,7 +250,7 @@ class HitPix2DacConfig(HitPixDacConfig):
         assert self.vth in range(1 << 8)
 
         b = bitarray.bitarray()
-        b.extend(bitarray.util.int2ba(self.vth, 8, endian='little'))
+        b.extend(bitarray.util.int2ba(self.vth, 8, endian='big'))
         b.extend(bitarray.util.int2ba(self.ipfoll, 6, endian='little'))
         b.extend(bitarray.util.int2ba(self.vncomp, 6, endian='little'))
         b.extend(bitarray.util.int2ba(self.ipload2, 6, endian='little'))
@@ -282,11 +282,15 @@ hitpix2_single = HitPixSetup(
     chip=hitpix2,
     chip_rows=1,
     chip_columns=1,
-    invert_pins=bitfield(ReadoutPins.ro_ldconfig, ReadoutPins.dac_ld,
-                         ReadoutPins.dac_inv_ck, ReadoutPins.ro_inv_ck),
+    invert_pins=bitfield(
+        ReadoutPins.ro_ldconfig,
+        ReadoutPins.dac_ld,
+        ReadoutPins.dac_inv_ck,
+        ReadoutPins.ro_inv_ck,
+    ),
     version_number=1,
-    vc_baseline=(0, 4),
-    vc_threshold=(0, 1),
+    vc_baseline=(1, 4),
+    vc_threshold=(1, 1),
     vc_injection=(2, 0),
 )
 
