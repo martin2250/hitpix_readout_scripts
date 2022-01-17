@@ -187,12 +187,12 @@ if __name__ == '__main__':
 
     # plot maps
     im_thresh = ax_thresh.imshow(
-        threshold[idx_scan].T,
+        np.flip(threshold[idx_scan], axis=1),
         vmin=range_threshold[0],
         vmax=range_threshold[1],
     )
     im_noise = ax_noise.imshow(
-        noise[idx_scan].T,
+        np.flip(noise[idx_scan], axis=1),
         vmin=range_noise[0],
         vmax=range_noise[1],
     )
@@ -203,8 +203,8 @@ if __name__ == '__main__':
     fig.colorbar(im_noise, ax=ax_noise)
 
     def redraw_maps():
-        im_thresh.set_data(threshold[idx_scan].T)
-        im_noise.set_data(noise[idx_scan].T)
+        im_thresh.set_data(np.flip(threshold[idx_scan], axis=1))
+        im_noise.set_data(np.flip(noise[idx_scan], axis=1))
 
     # plot scurve
     x_fit = np.linspace(np.min(config.injection_voltage),

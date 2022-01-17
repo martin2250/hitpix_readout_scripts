@@ -72,9 +72,9 @@ class LiveViewFrames:
             hits_total += hits_new
             plot_total_us += plot_new_us
             # update plots
-            image_frame.set_data(hits_new)
+            image_frame.set_data(np.flip(hits_new, axis=1))
             image_frame.set_norm(LogNorm(vmin=1, vmax=np.max(hits_new)))
-            image_total.set_data(hits_total)
+            image_total.set_data(np.flip(hits_total, axis=1))
             image_total.set_norm(LogNorm(vmin=1, vmax=np.max(hits_total)))
             ax_frame.set_title(f'hits / {format_time(plot_new_us)}')
             ax_total.set_title(f'hits / {format_time(plot_total_us)}')

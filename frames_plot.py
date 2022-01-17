@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     # plot maps
     im_hits = ax_map.imshow(
-        hits_frames[idx_scan].T,
+        np.flip(hits_frames[idx_scan], axis=1),
         vmin=range_hits[0],
         vmax=range_hits[1],
     )
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     fig.colorbar(im_hits, ax=ax_map)
 
     def redraw_maps():
-        im_hits.set_data(hits_frames[idx_scan].T)
+        im_hits.set_data(np.flip(hits_frames[idx_scan], axis=1))
 
     # plot scurve
     line_data, = ax_curve.plot([], [])
