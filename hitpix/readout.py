@@ -61,5 +61,5 @@ class HitPixReadout(Readout):
         if self.setup.version_number != version.adapter:
             raise RuntimeError(
                 f'FPGA bitstream adapter version ({version.adapter}) does not match setup ({self.setup.version_number})')
-        if version.readout != 8:
+        if version.readout != 9:
             raise RuntimeError(f'unsupported readout version {version.readout}')

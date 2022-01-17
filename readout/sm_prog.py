@@ -73,7 +73,7 @@ def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13
     assert (len(packet) % 4) == 0
     data = np.frombuffer(packet, '<u4')
     # check that number of values can be divided into equal parts
-    assert (len(data) % (columns // 2 + 1)) == 0
+    assert (len(data) % (columns // 2 + 1)) == 0, f'{len(data)=}'
     # reshape data to extract individual hit frames
     data = np.reshape(data, (-1, columns // 2 + 1))
     # get timestamps

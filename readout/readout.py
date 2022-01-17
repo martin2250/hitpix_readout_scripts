@@ -136,6 +136,7 @@ class Readout:
             instr if isinstance(instr, int) else instr.to_binary()
             for instr in assembly
         ]
+        assert (len(assembly_int) + offset) <= (1 << 12), 'sm prog too large'
         data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
         self._expect_response()
