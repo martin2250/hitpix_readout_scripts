@@ -61,7 +61,7 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
         # start measurement
         responses.append(fastreadout.expect_response())
         ro.sm_start(num_rounds)
-        ro.wait_sm_idle()
+        ro.wait_sm_idle(5.0)
 
     responses[-1].event.wait(5)
 

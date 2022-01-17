@@ -129,7 +129,7 @@ def prog_injections_full(num_injections: int, shift_clk_div: int, pulse_cycles: 
         # read out current row after injections
         cfg_col_readout = HitPixColumnConfig(0, 0, 0, row % chip.rows)
         # inject into next row in next loop iteration
-        row_inj_next = (row + 1) % 24
+        row_inj_next = (row + 1) % chip.rows
         cfg_col_inj_next = HitPixColumnConfig(
             inject_row=(1 << row_inj_next),
             inject_col=(1 << chip.columns) - 1,
