@@ -22,7 +22,7 @@ class SCurveConfig:
     injection_pulse_us: float
     injection_pause_us: float
     setup_name: str
-    shift_clk_div: int = 1
+    shift_clk_div: int = 0
     injection_delay: float = 0.01  # DACs needs around 3ms
 
     def asdict(self) -> dict:

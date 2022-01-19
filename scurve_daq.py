@@ -4,7 +4,7 @@ from typing import Literal
 def __get_config_dict_ext() -> dict:
     return {
         'pulse_us': 2.5,
-        'pause_us': 7.5,
+        'pause_us': 17.5,
     }
 
 def main(
