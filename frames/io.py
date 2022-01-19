@@ -58,7 +58,7 @@ def save_frames(h5group: h5py.Group, config: FrameConfig, frames: np.ndarray, ti
     h5group.create_dataset('frames', data=frames, compression='gzip')
     h5group.create_dataset('times', data=times, compression='gzip')
 
-def load_frames(h5group: h5py.Group) -> tuple[FrameConfig, np.ndarray, np.ndarray]:
+def load_frames(h5group: h5py.Group, load_times = True) -> tuple[FrameConfig, np.ndarray, np.ndarray]:
     # load attributes
     config_dict = json.loads(cast(str, h5group.attrs['config']))
     # TODO: remove this eventually
@@ -71,7 +71,7 @@ def load_frames(h5group: h5py.Group) -> tuple[FrameConfig, np.ndarray, np.ndarra
     frames = dset_frames[()]
     assert isinstance(frames, np.ndarray)
     # load times
-    if 'times' in h5group:
+    if load_times and 'times' in h5group:
         dset_times = h5group['times']
         assert isinstance(dset_times, h5py.Dataset)
         times = dset_times[()]
