@@ -7,6 +7,7 @@ import util.voltage_channel
 import numpy as np
 from pathlib import Path
 import atexit
+from pymeasure.instruments.keithley import Keithley2400
 
 ################################################################################
 
@@ -68,6 +69,7 @@ serial_port_name, board = config_readout.find_board()
 hv_channel = util.voltage_channel.open_voltage_channel(board.default_hv_driver, 'VDD')
 assert isinstance(hv_channel, util.voltage_channel.Keithley2400VoltageChannel)
 smu = hv_channel.smu
+assert isinstance(smu, Keithley2400)
 
 ################################################################################
 
@@ -89,9 +91,9 @@ with open(output_file, 'w') as f_out:
         print(f'set {voltage:0.2f}V', end=' ', flush=True)
         smu.source_voltage = voltage
 
-        smu.measure_voltage()
+        smu.measure_voltage(nplc=0.1)
         for _ in range(10):
-            voltage_meas = smu.voltage
+            voltage_meas = np.mean(smu.voltage)
             print(f'is {voltage_meas:0.3f}V', end=' ', flush=True)
             if abs(voltage_meas - voltage) < 0.1:
                 break
@@ -102,8 +104,12 @@ with open(output_file, 'w') as f_out:
             break # proably ran into compliance
 
         time.sleep(2)
-        smu.measure_current(nplc=100)
-        current_meas = smu.current
+        smu.measure_current(nplc=10)
+        smu.config_buffer(5)
+        smu.start_buffer()
+        smu.wait_for_buffer()
+        current_meas = np.mean(smu.buffer_data)
+        smu.stop_buffer()
 
         print(f'{voltage_meas:e}\t{current_meas:e}', file=f_out)
         print(f'is {current_meas*1e6:0.4f}µA', flush=True)
