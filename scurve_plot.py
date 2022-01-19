@@ -81,6 +81,9 @@ if __name__ == '__main__':
 
     ################################################################################
 
+    # undo x axis flip introduced by shift register direction
+    hits_noise = np.flip(hits_noise, axis=-1)
+
     sensor_size = hits_signal_first.shape[1:]
     # pixel edges for pcolormesh
     pixel_edges = pixel_edges = cast(tuple[np.ndarray, np.ndarray], tuple(
@@ -134,7 +137,7 @@ if __name__ == '__main__':
     gs_sliders = gs[1, 2]
 
     # interactive state
-    idx_pixel = (0, 0)
+    idx_pixel = (0, 0) # Y, X (row first)
     idx_scan = tuple(0 for _ in scan_shape)
     fix_idx = False
 
@@ -187,12 +190,12 @@ if __name__ == '__main__':
 
     # plot maps
     im_thresh = ax_thresh.imshow(
-        np.flip(threshold[idx_scan], axis=1),
+        threshold[idx_scan],
         vmin=range_threshold[0],
         vmax=range_threshold[1],
     )
     im_noise = ax_noise.imshow(
-        np.flip(noise[idx_scan], axis=1),
+        noise[idx_scan],
         vmin=range_noise[0],
         vmax=range_noise[1],
     )
@@ -203,8 +206,8 @@ if __name__ == '__main__':
     fig.colorbar(im_noise, ax=ax_noise)
 
     def redraw_maps():
-        im_thresh.set_data(np.flip(threshold[idx_scan], axis=1))
-        im_noise.set_data(np.flip(noise[idx_scan], axis=1))
+        im_thresh.set_data(threshold[idx_scan])
+        im_noise.set_data(noise[idx_scan])
 
     # plot scurve
     x_fit = np.linspace(np.min(config.injection_voltage),
@@ -268,13 +271,13 @@ if __name__ == '__main__':
         if fix_idx or (event.inaxes != ax_thresh and event.inaxes != ax_noise):
             return
         idx_pixel_new = tuple(
-            map(lambda p: int(p + 0.5), (event.xdata, event.ydata)))
+            map(lambda p: int(p + 0.5), (event.ydata, event.xdata)))
         if idx_pixel == idx_pixel_new:
             return
         idx_pixel = idx_pixel_new
         for line in lines_selected:
-            line.set_xdata(idx_pixel[:1])
-            line.set_ydata(idx_pixel[1:])
+            line.set_xdata(idx_pixel[1:])
+            line.set_ydata(idx_pixel[:1])
         redraw_curve()
 
     def press_event(event: MouseEvent):
