@@ -86,13 +86,13 @@ with open(output_file, 'w') as f_out:
     print('# Voltage (V)\tCurrent (A)', file=f_out)
 
     for i, voltage in enumerate(voltages):
-        print(f'set {voltage:0.2f}V', end=' ')
+        print(f'set {voltage:0.2f}V', end=' ', flush=True)
         smu.source_voltage = voltage
 
         smu.measure_voltage()
         for _ in range(10):
             voltage_meas = smu.voltage
-            print(f'is {voltage_meas:0.3f}V', end=' ')
+            print(f'is {voltage_meas:0.3f}V', end=' ', flush=True)
             if abs(voltage_meas - voltage) < 0.1:
                 break
             time.sleep(0.05)
@@ -101,9 +101,10 @@ with open(output_file, 'w') as f_out:
             print('# voltage not reached, aborting', file=f_out)
             break # proably ran into compliance
 
-        smu.measure_current()
+        time.sleep(2)
+        smu.measure_current(nplc=100)
         current_meas = smu.current
 
         print(f'{voltage_meas:e}\t{current_meas:e}', file=f_out)
-        print(f'is {current_meas*1e6:0.4f}µA')
+        print(f'is {current_meas*1e6:0.4f}µA', flush=True)
 
