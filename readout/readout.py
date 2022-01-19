@@ -56,6 +56,7 @@ class Readout:
         self._time_sync: Optional[tuple[int, float]] = None
         self._serial_port.set_low_latency_mode(True)
         self._sm_error_count = 0
+        self._sm_prog_bits = 12
     
     def close(self) -> None:
         self.event_stop.set()
@@ -111,7 +112,6 @@ class Readout:
         self.send_packet(bytes([self.CMD_REGISTER_WRITE, address]) + value.to_bytes(4, 'little'))
     
     def read_register(self, address: int) -> int:
-        # raise NotImplementedError()
         assert address in range(256)
         response = self._expect_response()
         self.send_packet(bytes([self.CMD_REGISTER_READ, address]))
@@ -136,7 +136,7 @@ class Readout:
             instr if isinstance(instr, int) else instr.to_binary()
             for instr in assembly
         ]
-        assert (len(assembly_int) + offset) <= (1 << 12), 'sm prog too large'
+        assert (len(assembly_int) + offset) <= (1 << self._sm_prog_bits), 'sm prog too large'
         data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
         self._expect_response()
@@ -184,6 +184,8 @@ class Readout:
             self.fast_tx_flush()
             self._write_function_card_raw(b'\xff')
             self.synchronize()
+            if self.get_version().readout >= 0x0010:
+                self._sm_prog_bits = 14
             if not self.get_sm_status().idle:
                 print('init: state machine was still running, aborting')
                 self.sm_abort()
