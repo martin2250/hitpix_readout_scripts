@@ -74,7 +74,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     responses = [fastreadout.expect_response() for _ in range(num_runs)]
 
     duration_run = 1e-6 * config.frames_per_run * (config.frame_length_us + config.pause_length_us)
-    timeout = 1.0 + duration_run
+    timeout = 5.0 + duration_run
 
     if progress is not None:
         progress.total = num_runs
