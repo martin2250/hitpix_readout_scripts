@@ -57,7 +57,7 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--fps',
+        '--live_fps',
         type=float, default=5.0,
         help='live view fps',
     )
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     hv_driver: str = args.hv_driver
     vssa_driver: str = args.vssa_driver
     vdd_driver: str = args.vdd_driver
-    fps: float = args.fps
+    fps: float = args.live_fps
     no_readout: bool = args.no_readout
     no_laser: bool = args.no_laser
     no_motion: bool = args.no_motion

@@ -36,10 +36,12 @@ def prog_read_frames(frame_cycles: int, pulse_cycles: int, shift_clk_div: int, p
         cfg_int.set_pin(ReadoutPins.ro_rescnt, True),
         Sleep(pulse_cycles),
         cfg_int,
+        Sleep(pulse_cycles),
         # take data
         cfg_int.set_pin(ReadoutPins.ro_frame, True),
         *prog_sleep(frame_cycles),
         cfg_int,
+        Sleep(pulse_cycles),
     ]
     for row in range(chip.rows + 1):
         col_cfg = HitPixColumnConfig(0, 0, 0, row)
