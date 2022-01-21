@@ -2,7 +2,7 @@ import dataclasses
 import datetime
 import json
 from dataclasses import dataclass
-from typing import Optional, cast
+from typing import Optional, cast, Any
 
 import h5py
 import numpy as np
@@ -22,13 +22,19 @@ class SCurveConfig:
     injection_pulse_us: float
     injection_pause_us: float
     setup_name: str
+
+    rows: np.ndarray[Any,np.dtype[np.uint]]
+    simultaneous_injections: int
+
     shift_clk_div: int = 0
     injection_delay: float = 0.01  # DACs needs around 3ms
+
 
     def asdict(self) -> dict:
         d = dataclasses.asdict(self)
         d['dac_cfg'] = dataclasses.asdict(self.dac_cfg)
         d['injection_voltage'] = self.injection_voltage.tolist()
+        d['rows'] = self.rows.tolist()
         return d
 
     @staticmethod
@@ -41,12 +47,17 @@ class SCurveConfig:
         injection_voltage = np.array(d['injection_voltage'])
         del d['injection_voltage']
         # legacy data
-        for key in ['injection_pause_us', 'injection_pulse_us', 'voltage_vssa', 'voltage_vdd']:
+        for key in ['injection_pause_us', 'injection_pulse_us', 'voltage_vssa', 'voltage_vdd', 'simultaneous_injections']:
             if not key in d:
                 d[key] = -1
+        if not 'rows' in d:
+            d['rows'] = [-1]
+        rows = np.array(d['rows'], dtype=np.uint)
+        del d['rows']
         return SCurveConfig(
             dac_cfg=dac_cfg,
             injection_voltage=injection_voltage,
+            rows=rows,
             **d,
         )
 

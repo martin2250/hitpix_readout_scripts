@@ -5,17 +5,18 @@ def __get_config_dict_ext() -> dict:
     return {
         'pulse_us': 2.5,
         'pause_us': 17.5,
+        'simultaneous_injections': -2,
     }
 
 def main(
     output_file: str,
     setup_name: str,
     injection_voltage_range: str,
+    rows_str: str,
     injections_total: int,
     injections_per_round: int,
     args_scan: list[str],
     args_set: list[str],
-    read_noise: bool,
     file_exists: Literal['delete', 'continue', 'exit', 'ask'],
     vdd_driver: str = 'manual',
     vssa_driver: str = 'manual',
@@ -44,8 +45,21 @@ def main(
     ############################################################################
 
     setup = hitpix.setups[setup_name]
+    # injection voltages
     injection_voltage = util.gridscan.parse_range(injection_voltage_range)
+    # rows
+    if rows_str == 'all':
+        rows = np.arange(setup.pixel_rows, dtype=np.uint)
+    else:
+        rows = np.array(util.gridscan.parse_int_range(rows_str), dtype=np.uint)
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
+
+    # check simultaneous_injections parameter
+    for scan_parameter in scan_parameters:
+        if not scan_parameter.name == 'simultaneous_injections':
+            continue
+        for value in scan_parameter.values:
+            assert (setup.pixel_columns % abs(int(value))) == 0
 
     config_dict_template = {
         'dac': setup.chip.dac_config_class.default(),
@@ -56,6 +70,15 @@ def main(
     ############################################################################
 
     def config_from_dict(scan_dict: dict) -> SCurveConfig:
+        simultaneous_injections = scan_dict['simultaneous_injections']
+        assert isinstance(simultaneous_injections, int)
+        # check that abs(simultaneous_injections) divides number of columns
+        # without remainder
+        assert (setup.pixel_columns % abs(simultaneous_injections)) == 0
+        # smaller than zero: input == injection steps
+        if simultaneous_injections < 0:
+            simultaneous_injections = setup.pixel_columns // abs(simultaneous_injections)
+        # construct config
         return SCurveConfig(
             voltage_baseline=scan_dict['baseline'],
             voltage_threshold=scan_dict['threshold'],
@@ -68,6 +91,8 @@ def main(
             injection_pulse_us=scan_dict['pulse_us'],
             injection_pause_us=scan_dict['pause_us'],
             setup_name=setup_name,
+            rows=rows,
+            simultaneous_injections=simultaneous_injections,
         )
 
     ############################################################################
@@ -136,7 +161,7 @@ def main(
                 prog_meas.reset()
                
                 res = measure_scurves(
-                    ro, fastreadout, config, read_noise, prog_meas)
+                    ro, fastreadout, config, prog_meas)
                 # store measurement
                 group = file.create_group(group_name)
                 save_scurve(group, config, *res)
@@ -147,8 +172,7 @@ def main(
         config = config_from_dict(config_dict_template)
         set_voltages(config)
 
-        res = measure_scurves(ro, fastreadout, config,
-                                read_noise, tqdm.tqdm(dynamic_ncols=True))
+        res = measure_scurves(ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True))
 
         with h5py.File(path_output, 'w') as file:
             file.attrs['commandline'] = sys.argv
@@ -208,9 +232,9 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--no_noise',
-        action='store_true',
-        help='do not read noise hits, inject into entire row at a time',
+        '--rows',
+        default='all',
+        help='which rows to read, eg "10:12" or "[10, 11]"',
     )
 
     parser.add_argument(
@@ -264,11 +288,11 @@ if __name__ == '__main__':
         output_file=args.output_file,
         setup_name=args.setup,
         injection_voltage_range=args.voltages,
+        rows_str=args.rows,
         injections_total=args.injections[0],
         injections_per_round=args.injections[1],
         args_scan=args.scan or [],
         args_set=args.set or [],
-        read_noise=not args.no_noise,
         file_exists=args.exists,
         vssa_driver=args.vssa_driver,
         vdd_driver=args.vdd_driver,

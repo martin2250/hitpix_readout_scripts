@@ -60,7 +60,8 @@ def parse_range(range_str: str) -> np.ndarray:
     if range_str.startswith('['):
         assert range_str.endswith(']')
         parts = range_str[1:-1].split(',')
-        return np.array(float(p) for p in parts)
+        # create proper array instead of generator object
+        return np.array([float(p) for p in parts])
     else:
         parts = range_str.split(':')
         assert len(parts) in (3, 4)
@@ -109,3 +110,14 @@ def apply_set(param_dict: dict, args_set: list[str]) -> None:
 
 def group_name(prefix: str, scan_idx: Iterable[int]) -> str:
     return prefix + ''.join(f'_{i}' for i in scan_idx)
+
+def parse_int_range(range_str: str) -> list[int]:
+    if range_str.startswith('['):
+        assert range_str.endswith(']')
+        parts = range_str[1:-1].split(',')
+        return [int(p) for p in parts]
+    else:
+        parts = range_str.split(':')
+        assert len(parts) in (1, 2, 3)
+        parts_int = map(int, parts)
+        return list(range(*parts_int))

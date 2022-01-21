@@ -9,10 +9,17 @@ from readout.instructions import Finish
 from readout.sm_prog import decode_column_packets, prog_dac_config
 
 from .io import SCurveConfig
-from .sm_prog import prog_injections_full, prog_injections_half
+from .sm_prog import prog_injections_variable
 
 
-def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveConfig, read_noise: bool, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
+def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    ############################################################################
+    # calculations
+    setup = ro.setup
+
+    assert (setup.pixel_columns % config.simultaneous_injections) == 0
+    injection_steps = setup.pixel_columns // config.simultaneous_injections
+
     ############################################################################
     # configure readout & chip
 
@@ -32,10 +39,14 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
     ############################################################################
     # prepare statemachine
 
-    if read_noise:
-        prog_injection = prog_injections_half(config.injections_per_round, config.shift_clk_div, 50, ro.setup)
-    else:
-        prog_injection = prog_injections_full(config.injections_per_round, config.shift_clk_div, 50, ro.setup)
+    prog_injection = prog_injections_variable(
+        num_injections=config.injections_per_round,
+        shift_clk_div=config.shift_clk_div,
+        pulse_cycles=50,
+        setup=ro.setup,
+        rows=[int(row) for row in config.rows], # np.uint64 to python int
+        simultaneous_injections=config.simultaneous_injections,
+    )
     prog_injection.append(Finish())
     ro.sm_write(prog_injection)
 
@@ -61,9 +72,9 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
         # start measurement
         responses.append(fastreadout.expect_response())
         ro.sm_start(num_rounds)
-        ro.wait_sm_idle(5.0)
+        ro.wait_sm_idle(8.0)
 
-    responses[-1].event.wait(5)
+    responses[-1].event.wait(8.0)
 
     ############################################################################
     # process data
@@ -82,32 +93,34 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
         _, hits = decode_column_packets(response.data, setup.pixel_columns, setup.chip.bits_adder, setup.chip.bits_counter)
         hits = (ctr_max - hits) % ctr_max  # counter count down
 
-        if read_noise:
-            # sum over all hit frames
-            hits = hits.reshape(-1, 2 * setup.pixel_rows, setup.pixel_columns)
-            hits = np.sum(hits, axis=0)
+        # reshape hits
+        hits = hits.reshape(
+            num_rounds,
+            injection_steps,
+            len(config.rows),
+            setup.pixel_columns,
+        )
 
-            # separate signal and noise columns
-            even = hits[:setup.pixel_rows]
-            odd = hits[setup.pixel_rows:]
+        # sum over all rounds for this injection voltage
+        hits = np.sum(hits, axis=0)
 
-            hits_signal.append(np.where(
-                np.arange(setup.pixel_rows) % 2 == 0,
-                even, odd,
-            ))
-            hits_noise.append(np.where(
-                np.arange(setup.pixel_rows) % 2 == 1,
-                even, odd,
-            ))
-        else:
-            # sum over all hit frames
-            hits = hits.reshape(-1, setup.pixel_rows, setup.pixel_columns)
-            hits = np.sum(hits, axis=0)
-            hits_signal.append(hits)
+        # extract data from injection steps
+        signal = np.zeros((len(config.rows), setup.pixel_columns))
+        for injection_step in range(injection_steps):
+            # extract signal hits
+            signal[:,injection_step::injection_steps] = hits[injection_step,:,injection_step::injection_steps]
+            # remove signal hits from noise hits
+            hits[injection_step,:,injection_step::injection_steps].fill(0)
+
+        # sum up injection steps to get remaining noise hits
+        noise = np.sum(hits, axis=0)
+
+        hits_signal.append(signal)
+        hits_noise.append(noise)
 
     hits_signal = np.array(hits_signal)
 
-    if read_noise:
+    if injection_steps > 1:
         hits_noise = np.array(hits_noise)
         return hits_signal, hits_noise
     else:
