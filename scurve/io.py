@@ -23,7 +23,7 @@ class SCurveConfig:
     injection_pause_us: float
     setup_name: str
 
-    rows: np.ndarray[Any,np.dtype[np.uint]]
+    rows: np.ndarray # [Any,np.dtype[np.uint]] works only in np 1.22
     simultaneous_injections: int
 
     shift_clk_div: int = 0

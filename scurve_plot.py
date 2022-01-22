@@ -83,6 +83,9 @@ if __name__ == '__main__':
 
     # undo x axis flip introduced by shift register direction
     hits_noise = np.flip(hits_noise, axis=-1)
+    hits_signal = np.flip(hits_signal, axis=-1)
+
+    has_noise = np.sum(hits_noise) > 0
 
     sensor_size = hits_signal_first.shape[1:]
     # pixel edges for pcolormesh
@@ -215,17 +218,19 @@ if __name__ == '__main__':
     line_data, = ax_curve.plot(
         config.injection_voltage, config.injection_voltage, 'x')
     line_fit, = ax_curve.plot(x_fit, x_fit, 'r')
-    ax_curve.set_ylim(0, 1.05)
+    ax_curve.set_ylim(0, 1.15)
+    ax_curve.axhline(1.0, ls=':', color='k')
     ax_curve.set_xlabel('Injection Voltage (V)')
     ax_curve.set_ylabel('Efficiency')
 
-    ax_curve_noise = ax_curve.twinx()
-    ax_curve_noise.set_ylabel('Noise Hits')
-    line_noise, = ax_curve_noise.plot(
-        config.injection_voltage,
-        config.injection_voltage,
-        'r+',
-    )
+    if has_noise:
+        ax_curve_noise = ax_curve.twinx()
+        ax_curve_noise.set_ylabel('Noise Hits')
+        line_noise, = ax_curve_noise.plot(
+            config.injection_voltage,
+            config.injection_voltage,
+            'r+',
+        )
 
     def redraw_curve():
         y_fit = scurve.analysis.fitfunc_sigmoid(
@@ -233,8 +238,12 @@ if __name__ == '__main__':
             threshold[idx_scan + idx_pixel],
             1e-3*noise[idx_scan + idx_pixel]
         )
-        line_data.set_ydata(efficiency[idx_scan+(...,)+idx_pixel])
+        data_eff = efficiency[idx_scan+(...,)+idx_pixel]
+        data_eff = np.where(data_eff < 1.1, data_eff, 1.15)
+        line_data.set_ydata(data_eff)
         line_fit.set_ydata(y_fit)
+        if not has_noise:
+            return
         data_noise = hits_noise[idx_scan+(...,)+idx_pixel]
         data_noise = np.where(data_noise < 1, np.nan, data_noise)
         line_noise.set_ydata(data_noise)
