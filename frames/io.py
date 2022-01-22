@@ -21,6 +21,7 @@ class FrameConfig:
     num_frames: int
     frame_length_us: float
     pause_length_us: float
+    reset_counters: bool
     read_adders: bool
     setup_name: str
     shift_clk_div: int = 0
@@ -39,12 +40,11 @@ class FrameConfig:
         dac_cfg = hitpix.setups[setup_name].chip.dac_config_class(**d['dac_cfg'])
         del d['dac_cfg']
         # TODO: remove this, HV should always be set
-        if not 'voltage_hv' in d:
-            d['voltage_hv'] = -1
-        if not 'voltage_vdd' in d:
-            d['voltage_vdd'] = -1
-        if not 'voltage_vssa' in d:
-            d['voltage_vssa'] = -1
+        for name in ['voltage_hv', 'voltage_vdd', 'voltage_vssa']:
+            if not name in d:
+                d[name] = -1.0
+        if not 'reset_counters' in d:
+            d['reset_counters'] = True
         return FrameConfig(
             dac_cfg=dac_cfg,
             **d,

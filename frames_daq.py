@@ -8,6 +8,7 @@ def __get_config_dict_ext() -> dict:
         'frame_us': 5000.0,
         'pause_us': 0.0,
         'hv': 5.0,
+        'reset_counters': 0,
     }
 
 
@@ -71,6 +72,7 @@ def main(
             frame_length_us=config_dict['frame_us'],
             pause_length_us=config_dict['pause_us'],
             read_adders=read_adders,
+            reset_counters=bool(config_dict['reset_counters']),
             setup_name=setup_name,
         )
 
@@ -146,12 +148,10 @@ def main(
                 # perform measurement
                 prog_meas.reset()
                 ro.sm_abort()
-                frames, times = read_frames(
-                    ro, fastreadout, config, prog_meas)
+                frames, times = read_frames(ro, fastreadout, config, prog_meas)
                 # sums -> sum up all frames
                 if sums_only:
-                    shape_new = (1, *frames.shape[1:])
-                    frames = frames.sum(axis=0).reshape(*shape_new)
+                    frames = frames.sum(axis=0, keepdims=True)
                     times = times[:1]
                 # store measurement
                 group = file.create_group(group_name)
@@ -211,12 +211,14 @@ def main(
                     try:
                         hits_new = q_hits.get_nowait()
                         image_frame.set_data(hits_new + 1)
-                        image_frame.set_norm(LogNorm(vmin=1, vmax=np.max(hits_new)))
+                        image_frame.set_norm(
+                            LogNorm(vmin=1, vmax=np.max(hits_new)))
                         hits += hits_new
                         plot_total_us += plot_frame_us
                         image_total.set_data(hits)
                         image_total.set_clim(0, np.max(hits))
-                        ax_total.set_title(f'hits / {format_time(plot_total_us)}')
+                        ax_total.set_title(
+                            f'hits / {format_time(plot_total_us)}')
                     except Empty:
                         pass
             Process(
@@ -228,8 +230,7 @@ def main(
             ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True), callback)
 
         if sums_only:
-            shape_new = (1, *frames.shape[1:])
-            frames = frames.sum(axis=0).reshape(*shape_new)
+            frames = frames.sum(axis=0, keepdims=True)
             times = times[:1]
 
         with h5py.File(path_output, 'w') as file:
@@ -335,7 +336,7 @@ if __name__ == '__main__':
             for name, value in hitpix.defaults.setup_dac_defaults[parsed_args.setup].items():
                 choices_set.append(f'dac.{name}={value}')
             return filter(lambda s: s.startswith(prefix), choices_set)
-        
+
         def scan_completer(prefix, parsed_args, **kwargs):
             return map(lambda s: s + ':', set_completer(prefix, parsed_args, **kwargs))
 

@@ -1,7 +1,7 @@
 import time
 from typing import Optional
 
-import numpy as np
+import numpy as np, numpy._globals
 import tqdm
 from hitpix import HitPixSetup
 from readout import Response
@@ -20,18 +20,31 @@ def _decode_responses(
     timestamps: list[np.ndarray],
     timeout: float,
     setup: HitPixSetup,
+    reset_counters: bool,
     callback = None,
     ):
     ctr_max = 1 << setup.chip.bits_counter
-    
+    hits_last = None
+
     for response in responses:
         response.event.wait(timeout)
         assert response.data is not None
 
         # decode hits
         block_timestamps, block_frames = decode_column_packets(response.data, setup.pixel_columns, setup.chip.bits_adder, setup.chip.bits_counter)
-        block_frames = (ctr_max - block_frames) % ctr_max  # counter counts down
         block_frames = block_frames.reshape(-1, setup.pixel_rows, setup.pixel_columns)
+
+        if not reset_counters:
+            if hits_last is None:
+                # duplicate first frame -> zero frame at start
+                # this makes sure the total number of frames is
+                # the same as with reset_counters=True
+                hits_last = block_frames[:1]
+            hits_last_next = block_frames[-1:]
+            block_frames = np.diff(block_frames, axis=0, prepend=hits_last)
+            hits_last = hits_last_next
+
+        block_frames = (ctr_max - block_frames) % ctr_max  # counter counts down
         
         if callback:
             callback(block_frames)
@@ -59,6 +72,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
         pulse_cycles=50,
         shift_clk_div=config.shift_clk_div,
         pause_cycles=int(ro.frequency_mhz * config.pause_length_us),
+        reset_counters=config.reset_counters,
         setup=setup,
     )
     prog_readout.append(Finish())
@@ -94,6 +108,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
             timestamps,
             timeout,
             setup,
+            config.reset_counters,
             callback,
         ),
     )
@@ -113,7 +128,8 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
 
     ############################################################################
 
-    frames = np.hstack(frames).reshape(-1, setup.pixel_rows, setup.pixel_columns)
+    frames = np.concatenate(frames)
+
     timestamps = np.hstack(timestamps)
     # only store timestamp of first row of each frame
     timestamps = timestamps[::setup.pixel_rows]

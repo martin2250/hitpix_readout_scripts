@@ -3,7 +3,14 @@ from readout.instructions import *
 from readout.sm_prog import prog_shift_dense, prog_sleep
 
 
-def prog_read_frames(frame_cycles: int, pulse_cycles: int, shift_clk_div: int, pause_cycles: int, setup: HitPixSetup) -> tuple[list[Instruction], list[Instruction]]:
+def prog_read_frames(
+    frame_cycles: int,
+    pulse_cycles: int,
+    shift_clk_div: int,
+    pause_cycles: int,
+    reset_counters: bool,
+    setup: HitPixSetup,
+) -> tuple[list[Instruction], list[Instruction]]:
     '''returns programs (init and readout)'''
     assert setup.chip_rows == 1
     chip = setup.chip
@@ -29,20 +36,27 @@ def prog_read_frames(frame_cycles: int, pulse_cycles: int, shift_clk_div: int, p
     ]
 
     # readout
-    prog = [
+    prog = []
+    # reset counter every frame?
+    if reset_counters:
+        prog.extend([
+            # reset counters
+            cfg_int.set_pin(ReadoutPins.ro_rescnt, True),
+            Sleep(pulse_cycles),
+            cfg_int,
+            Sleep(pulse_cycles),
+        ])
+
+    prog.extend([
         # wait (empty if pause_cycles = 0)
         *prog_sleep(pause_cycles),
-        # reset counters
-        cfg_int.set_pin(ReadoutPins.ro_rescnt, True),
-        Sleep(pulse_cycles),
-        cfg_int,
-        Sleep(pulse_cycles),
         # take data
         cfg_int.set_pin(ReadoutPins.ro_frame, True),
         *prog_sleep(frame_cycles),
         cfg_int,
         Sleep(pulse_cycles),
-    ]
+    ])
+
     for row in range(chip.rows + 1):
         col_cfg = HitPixColumnConfig(0, 0, 0, row)
         # add time to make readout more consistent

@@ -13,6 +13,7 @@ def __get_config_dict_ext() -> dict:
         'frame_us': 5000.0,
         'pause_us': 0.0,
         'hv': 5.0,
+        'reset_counters': True,
     }
 
 
@@ -172,6 +173,7 @@ if __name__ == '__main__':
             frame_length_us=config_dict['frame_us'],
             pause_length_us=config_dict['pause_us'],
             read_adders=False,
+            reset_counters=bool(config_dict['reset_counters']),
             frames_per_run=frames_per_run,
             setup_name=setup_name,
         )
