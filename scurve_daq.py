@@ -159,9 +159,7 @@ def main(
                 set_voltages(config)
                 # perform measurement
                 prog_meas.reset()
-               
-                res = measure_scurves(
-                    ro, fastreadout, config, prog_meas)
+                res = measure_scurves(ro, fastreadout, config, prog_meas)
                 # store measurement
                 group = file.create_group(group_name)
                 save_scurve(group, config, *res)

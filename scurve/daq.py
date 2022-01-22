@@ -107,10 +107,12 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
         # extract data from injection steps
         signal = np.zeros((len(config.rows), setup.pixel_columns))
         for injection_step in range(injection_steps):
+            # columns are reversed by shift register (0-N == right to left)
+            injection_step_rev = injection_steps-1-injection_step
             # extract signal hits
-            signal[:,injection_step::injection_steps] = hits[injection_step,:,injection_step::injection_steps]
+            signal[:,injection_step::injection_steps] = hits[injection_step_rev,:,injection_step::injection_steps]
             # remove signal hits from noise hits
-            hits[injection_step,:,injection_step::injection_steps].fill(0)
+            hits[injection_step_rev,:,injection_step::injection_steps].fill(0)
 
         # sum up injection steps to get remaining noise hits
         noise = np.sum(hits, axis=0)
@@ -119,9 +121,6 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
         hits_noise.append(noise)
 
     hits_signal = np.array(hits_signal)
+    hits_noise = np.array(hits_noise)
 
-    if injection_steps > 1:
-        hits_noise = np.array(hits_noise)
-        return hits_signal, hits_noise
-    else:
-        return hits_signal, None
+    return hits_signal, hits_noise
