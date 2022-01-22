@@ -40,6 +40,7 @@ class FastReadout:
     def read(self) -> None:
         buffer = bytearray()
         n_tot = 0
+        t_start = time.perf_counter()
         while not self.event_stop.is_set():
             data_new = self.ftdi.read(3968 * 8192) # see AN232B-03 Optimising D2XX Data Throughput
             if not isinstance(data_new, bytes) or not data_new:
@@ -53,14 +54,20 @@ class FastReadout:
             index = buffer.rindex(b'\x00')
             packets = buffer[:index].split(b'\x00')
             del buffer[:index+1]
+            first_packet = True
             for packet in packets:
                 try:
                     response = self._response_queue.get(False)
                     response.data = cobs.decode(packet)
                     response.event.set()
+                    first_packet = False
                 except queue.Empty:
-                    print('fastro: received unexpected response', packet)
-        print(f'fastreadout total bytes: {n_tot}')
+                    if not first_packet:
+                        print('fastro: received unexpected response', packet)
+        t_end = time.perf_counter()
+        t_diff = t_end - t_start
+        mb_tot = n_tot / 1024**2
+        print(f'fastreadout {mb_tot:0.1f}MB, {t_diff:0.1f}s, {mb_tot/t_diff} MB/s')
 
     def expect_response(self) -> Response:
         response = Response()
