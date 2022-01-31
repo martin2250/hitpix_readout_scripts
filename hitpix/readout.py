@@ -61,7 +61,9 @@ class HitPixReadout(Readout):
         if self.setup.version_number != version.adapter:
             raise RuntimeError(
                 f'FPGA bitstream adapter version ({version.adapter}) does not match setup ({self.setup.version_number})')
-        if version.readout not in [0x009, 0x010]:
+        if (version.readout < 0x010) and (version.chip == 2):
+            print('readout version 10+ is recommended for HitPix2!')
+        if version.readout not in [0x008, 0x009, 0x010]:
             raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
         if version.readout >= 0x0010:
             self.frequency_mhz = 100
