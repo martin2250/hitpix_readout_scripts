@@ -8,7 +8,6 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
-from matplotlib.axes import Axes
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.widgets import Slider
 
@@ -168,8 +167,12 @@ if __name__ == '__main__':
     threshold_clean = threshold[np.isfinite(threshold) & (threshold > -0.5) & (threshold < 2)]
     noise_clean = noise[np.isfinite(noise) & (noise > 0) & (noise < 1000)]
 
-    range_threshold = np.min(threshold_clean), np.max(threshold_clean) # if threshold_clean.size > 0 else 0, 1
-    range_noise = np.min(noise_clean), np.max(noise_clean) # if noise_clean.size > 0 else 0, 1
+    try:
+        range_threshold = np.min(threshold_clean), np.max(threshold_clean) # if threshold_clean.size > 0 else 0, 1
+        range_noise = np.min(noise_clean), np.max(noise_clean) # if noise_clean.size > 0 else 0, 1
+    except ValueError:
+        range_threshold = 0, 1
+        range_noise = 0, 1
 
     # plot histograms
     _, bins_threshold, bars_threshold = ax_hthresh.hist(
