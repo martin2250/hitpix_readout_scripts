@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import threading
 import numpy as np
 import matplotlib.pyplot as plt
 import gzip, base64
@@ -12,6 +11,12 @@ num_events_per_nr_bits_set = np.zeros(9)
 num_events_per_bit_set = np.zeros(8)
 num_events_per_nr_bits_cleared = np.zeros(9)
 num_events_per_nr_bits_toggled = np.zeros(9)
+
+hits_above_put = 0
+hits_below_put = 0
+evts_above_put = 0
+evts_below_put = 0
+evts_both_put = 0
 
 events_total = 0
 events_discarded = 0
@@ -61,6 +66,16 @@ with open(filename, 'rb') as f:
             if (bits_set >> i_bit) & 0x01:
                 num_events_per_bit_set[i_bit] += 1
 
+
+        # noise in column above PuT or below?
+        above_put = np.sum(frames_diff[0,:test_row,test_col])
+        below_put = np.sum(frames_diff[0,test_row+1:,test_col])
+        hits_above_put += above_put
+        hits_below_put += below_put
+        evts_above_put += above_put > 0
+        evts_below_put += below_put > 0
+        evts_both_put += above_put > 0 and below_put > 0
+
         # what values did the other pixels in the column have?
         other_pixels = np.copy(frames)
         # exclude triggered pixel
@@ -83,6 +98,9 @@ with open(filename, 'rb') as f:
         other_pixels_values_per_ctr[frames[0, test_row, test_col]] += other_pixels_hist
 
 print(f'{events_total=} {events_discarded=}')
+print(f'{hits_above_put=:0.2e} {hits_below_put=:0.2e}')
+print(f'{evts_above_put=} {evts_below_put=} {evts_both_put=}')
+print(f'{evts_above_put+evts_below_put=}')
 
 if False:
     plt.bar(np.arange(8), num_events_per_bit_set / np.sum(num_events_per_ctr), width=1)
