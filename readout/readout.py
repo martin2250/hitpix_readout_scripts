@@ -131,7 +131,8 @@ class Readout:
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_EXEC]) + data)
     
-    def sm_write(self, assembly: InstructionsLike, offset: int = 0) -> None:
+    def sm_write(self, assembly: InstructionsLike, offset: int = 0) -> int:
+        '''returns offset of next instruction'''
         assembly_int = [
             instr if isinstance(instr, int) else instr.to_binary()
             for instr in assembly
@@ -141,6 +142,7 @@ class Readout:
         # write to board
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_WRITE]) + offset.to_bytes(2, 'little') + data)
+        return offset + len(assembly_int)
 
     def sm_start(self, runs: int = 1, offset: int = 0) -> None:
         assert runs in range(0x10000)

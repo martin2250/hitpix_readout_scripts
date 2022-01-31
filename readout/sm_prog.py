@@ -1,9 +1,10 @@
+from typing import Optional
 import bitarray
 import bitarray.util
 import numpy as np
 
 from .instructions import *
-from hitpix import ReadoutPins
+from hitpix import HitPixColumnConfig, HitPixSetup, ReadoutPins
 
 
 def prog_shift_simple(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
@@ -111,13 +112,13 @@ def prog_dac_config(cfg_dac_bin: bitarray.bitarray, shift_clk_div: int = 7) -> l
         cfg_int,
     ]
 
-def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7) -> list[Instruction]:
+def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7, shift_out_bits: Optional[int] = None) -> list[Instruction]:
     cfg_int = SetCfg(
-        shift_rx_invert = True, # rx not used
+        shift_rx_invert = True,
         shift_tx_invert = True,
         shift_toggle = True,
         shift_select_dac = False,
-        shift_word_len = 31, # rx not used
+        shift_word_len = shift_out_bits or 32,
         shift_clk_div = shift_clk_div,
         pins = 0,
     )
@@ -125,9 +126,60 @@ def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7) -> l
         cfg_int,
         Reset(True, True),
         Sleep(50),
-        *prog_shift_dense(cfg_col_bin, False),
+        *prog_shift_dense(cfg_col_bin, shift_out_bits is not None),
         Sleep(50),
         cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(50),
         cfg_int,
     ]
+
+def prog_read_matrix(setup: HitPixSetup, shift_clk_div: int = 1, pulse_cycles: int = 50, rows: Optional[list[int]] = None) -> list[Instruction]:
+    assert setup.chip_rows == 1
+    chip = setup.chip
+
+    if rows is None:
+        rows = list(range(chip.rows))
+
+    cfg_int = SetCfg(
+        shift_rx_invert=True,
+        shift_tx_invert=True,
+        shift_toggle=True,
+        shift_select_dac=False,
+        shift_word_len=2 * chip.bits_adder,
+        shift_clk_div=shift_clk_div,
+        pins=0,
+    )
+
+    # init
+    prog = [
+        *prog_col_config(
+            cfg_col_bin = setup.encode_column_config(HitPixColumnConfig(0, 0, 0, rows[0])),
+            shift_clk_div=shift_clk_div,
+            shift_out_bits=None,
+        ),
+    ]
+    rows_next = rows[1:] + [-1]
+    for row_next in rows_next:
+        # readout
+        prog.extend([
+            # prepend row with time
+            GetTime(),
+            # load count into column register
+            cfg_int.set_pin(ReadoutPins.ro_ldcnt, True),
+            Sleep(pulse_cycles),
+            cfg_int,
+            Sleep(pulse_cycles),
+            cfg_int.set_pin(ReadoutPins.ro_penable, True),
+            Sleep(pulse_cycles),
+            ShiftOut(1, False),
+            Sleep(pulse_cycles),
+            cfg_int,
+            Sleep(pulse_cycles),
+            # shift out data of current row and shift in next row
+            *prog_col_config(
+                cfg_col_bin = setup.encode_column_config(HitPixColumnConfig(0, 0, 0, row_next)),
+                shift_clk_div=shift_clk_div,
+                shift_out_bits=2*chip.bits_adder,
+            ),
+        ])
+    return prog

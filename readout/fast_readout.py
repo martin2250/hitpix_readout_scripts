@@ -67,7 +67,7 @@ class FastReadout:
         t_end = time.perf_counter()
         t_diff = t_end - t_start
         mb_tot = n_tot / 1024**2
-        print(f'fastreadout {mb_tot:0.1f}MB, {t_diff:0.1f}s, {mb_tot/t_diff} MB/s')
+        print(f'fastreadout {mb_tot:0.1f}MB, {t_diff:0.1f}s, {mb_tot/t_diff:0.2f} MB/s')
 
     def expect_response(self) -> Response:
         response = Response()
