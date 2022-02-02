@@ -3,6 +3,40 @@ import numpy as np
 import matplotlib.pyplot as plt
 import gzip, base64
 
+# https://github.com/google/jax/blob/6c8fc1b031275c85b02cb819c6caa5afa002fa1d/jax/lax_reference.py#L121-L150
+def population_count(x):
+    assert np.issubdtype(x.dtype, np.integer)
+    dtype = x.dtype
+    iinfo = np.iinfo(x.dtype)
+    if np.iinfo(x.dtype).bits < 32:
+        assert iinfo.kind in ('i', 'u')
+        x = x.astype(np.uint32 if iinfo.kind == 'u' else np.int32)
+    if iinfo.kind == 'i':
+        x = x.view(f"uint{np.iinfo(x.dtype).bits}")
+    assert x.dtype in (np.uint32, np.uint64)
+    m = [
+        np.uint64(0x5555555555555555),  # binary: 0101...
+        np.uint64(0x3333333333333333),  # binary: 00110011..
+        np.uint64(0x0f0f0f0f0f0f0f0f),  # binary:  4 zeros,  4 ones ...
+        np.uint64(0x00ff00ff00ff00ff),  # binary:  8 zeros,  8 ones ...
+        np.uint64(0x0000ffff0000ffff),  # binary: 16 zeros, 16 ones ...
+        np.uint64(0x00000000ffffffff),  # binary: 32 zeros, 32 ones
+    ]
+
+    if x.dtype == np.uint32:
+        m = list(map(np.uint32, m[:-1]))
+
+    x = (x & m[0]) + ((x >>  1) & m[0])  # put count of each  2 bits into those  2 bits
+    x = (x & m[1]) + ((x >>  2) & m[1])  # put count of each  4 bits into those  4 bits
+    x = (x & m[2]) + ((x >>  4) & m[2])  # put count of each  8 bits into those  8 bits
+    x = (x & m[3]) + ((x >>  8) & m[3])  # put count of each 16 bits into those 16 bits
+    x = (x & m[4]) + ((x >> 16) & m[4])  # put count of each 32 bits into those 32 bits
+    if x.dtype == np.uint64:
+        x = (x & m[5]) + ((x >> 32) & m[5])  # put count of each 64 bits into those 64 bits
+    return x.astype(dtype)
+
+num_events_per_pixel_put = np.zeros((48, 48))
+num_events_per_pixel_recv = np.zeros((48, 48))
 num_events_per_ctr = np.zeros(256)
 other_pixels_values = np.zeros(256)
 other_pixels_values_per_ctr = np.zeros((256, 256))
@@ -11,6 +45,10 @@ num_events_per_nr_bits_set = np.zeros(9)
 num_events_per_bit_set = np.zeros(8)
 num_events_per_nr_bits_cleared = np.zeros(9)
 num_events_per_nr_bits_toggled = np.zeros(9)
+
+num_hits_per_adder_bits_set = np.zeros(15)
+num_hits_per_adder_bits_cleared = np.zeros(15)
+num_hits_per_adder_bits_toggled = np.zeros(15)
 
 hits_above_put = 0
 hits_below_put = 0
@@ -47,6 +85,11 @@ with open(filename, 'rb') as f:
 
         # raw counter value before
         num_events_per_ctr[frames[0, test_row, test_col]] += 1
+        num_events_per_pixel_put[test_row, test_col] += 1
+
+        frames_diff_wo_put = frames_diff[0].copy()
+        frames_diff_wo_put[test_row, test_col] = 0
+        num_events_per_pixel_recv += frames_diff_wo_put
 
         # which bits were set before the event?
         for i_bit in range(8):
@@ -75,6 +118,35 @@ with open(filename, 'rb') as f:
         evts_above_put += above_put > 0
         evts_below_put += below_put > 0
         evts_both_put += above_put > 0 and below_put > 0
+
+        # check adders
+        # calculate running sum of counter values
+        adders = np.cumsum(frames, axis=1)
+        # we want the adder inputs at each pixel
+        # -> roll array by one and set first row to zero
+        adders = np.roll(adders, 1, axis=1)
+        adders[:,0,:] = 0
+        # check how many bits were newly set/toggled during injection
+        # "bit set after injection and not before injection"
+        adders_set = adders[1] & (~adders[0])
+        adders_cleared = adders[0] & (~adders[1])
+        adders_toggled = adders[1] ^ adders[0]
+        adders_set_popcnt = population_count(adders_set).astype(np.int64)
+        adders_toggled_popcnt = population_count(adders_toggled).astype(np.int64)
+        adders_cleared_popcnt = population_count(adders_cleared).astype(np.int64)
+        # histogram this for each hit
+        num_hits_per_adder_bits_set += np.bincount(
+            adders_set_popcnt[frames_diff[0] > 0],
+            minlength=len(num_hits_per_adder_bits_set),
+        )
+        num_hits_per_adder_bits_cleared += np.bincount(
+            adders_cleared_popcnt[frames_diff[0] > 0],
+            minlength=len(num_hits_per_adder_bits_cleared),
+        )
+        num_hits_per_adder_bits_toggled += np.bincount(
+            adders_toggled_popcnt[frames_diff[0] > 0],
+            minlength=len(num_hits_per_adder_bits_toggled),
+        )
 
         # what values did the other pixels in the column have?
         other_pixels = np.copy(frames)
@@ -122,7 +194,34 @@ if False:
     plt.bar(np.arange(8), num_events_per_bit / np.sum(num_events_per_ctr), width=1)
     plt.xlabel('number of bits set before injection')
 
-if True:
+if False:
+    import scipy.special
+    x = np.arange(len(num_hits_per_adder_bits_set))
+    y = num_hits_per_adder_bits_set / scipy.special.comb(x[-1], x)
+    # y = num_hits_per_adder_bits_cleared / np.sum(num_events_per_ctr)
+    plt.bar(x,y,width=1)
+    plt.semilogy()
+    plt.xlabel('number of adder lines set at each hit')
+
+if False:
+    import scipy.special
+    x = np.arange(len(num_hits_per_adder_bits_cleared))
+    y = num_hits_per_adder_bits_cleared / scipy.special.comb(x[-1], x)
+    # y = num_hits_per_adder_bits_cleared / np.sum(num_events_per_ctr)
+    plt.bar(x,y,width=1)
+    plt.semilogy()
+    plt.xlabel('number of adder lines cleared at each hit')
+
+if False:
+    import scipy.special
+    x = np.arange(len(num_hits_per_adder_bits_toggled))
+    y = num_hits_per_adder_bits_toggled / scipy.special.comb(x[-1], x)
+    # y = num_hits_per_adder_bits_toggled / np.sum(num_events_per_ctr)
+    plt.bar(x,y,width=1)
+    plt.semilogy()
+    plt.xlabel('number of adder lines toggled at each hit')
+
+if False:
     plt.bar(np.arange(256), num_events_per_ctr / np.sum(num_events_per_ctr), width=1)
     plt.xlabel('counter value before injection')
     plt.semilogy()
@@ -137,8 +236,19 @@ if False:
     plt.imshow(other_pixels_values_per_ctr.T, norm=matplotlib.colors.LogNorm())
     plt.xlabel('counter values of PuT before injection')
     plt.ylabel('counter values of noise hits before injection')
-        
 
-plt.axhline(0.5)
+if False:
+    import matplotlib.colors
+    # num_events_per_pixel_recv /= np.sum(num_events_per_pixel_put, axis=0, keepdims=True)
+    plt.imshow(num_events_per_pixel_recv, norm=matplotlib.colors.LogNorm())
+    # plt.imshow(num_events_per_pixel_put, norm=matplotlib.colors.LogNorm())
+    plt.colorbar()
+    plt.title('Number of Crosstalk Events per Pixel (PuT)')
+    plt.xlabel('Column')
+    plt.ylabel('Row')
+    plt.show()
+    exit()
+
+# plt.axhline(0.5)
 plt.ylabel('fraction X of events with crosstalk')
 plt.show()
