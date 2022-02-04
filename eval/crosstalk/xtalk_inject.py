@@ -2,6 +2,7 @@
 import atexit
 import base64
 import gzip
+import sys
 import threading
 import time
 from typing import Any, Optional
@@ -21,9 +22,12 @@ from readout.instructions import *
 from readout.sm_prog import (decode_column_packets, prog_col_config,
                              prog_dac_config, prog_read_matrix)
 from rich import print
+import rich.progress
 from util.sm_multiprog import SmMultiprog
 
 ################################################################################
+
+use_hitpix1 = True
 
 voltage_vdd = 1.90
 voltage_vssa = 1.25
@@ -35,20 +39,29 @@ voltage_threshold = 1.14
 injection_pulse_us = 2.5
 injection_pause_us = 7.5
 
-dac_cfg = hitpix.HitPix2DacConfig.default()
-dac_cfg.vth = int(255 * voltage_threshold/1.85)
-print(f'{dac_cfg.vth=}')
+if use_hitpix1:
+    dac_cfg = hitpix.HitPix1DacConfig.default()
+else:
+    dac_cfg = hitpix.HitPix2DacConfig.default()
+    dac_cfg.vth = int(255 * voltage_threshold/1.85)
 
 pulse_cycles = 50
 
 # preload all "victim" pixels with N injections
 test_injections_prepare = 15
 
-setup = hitpix.setups['hitpix2-1x1']
+if use_hitpix1:
+    setup = hitpix.setups['hitpix1']
+else:
+    setup = hitpix.setups['hitpix2-1x1']
 chip = setup.chip
 
-num_runs = 20
-frames_per_run = 1024
+if use_hitpix1:
+    num_runs = 180
+    frames_per_run = 256
+else:
+    num_runs = 20
+    frames_per_run = 1024
 
 ################################################################################
 # open readout
@@ -83,10 +96,10 @@ ro.set_injection_ctrl(
     int(injection_pause_us * ro.frequency_mhz),
 )
 
-# not needed for HitPix2
-# ro.set_threshold_voltage(voltage_threshold)
 ro.set_baseline_voltage(voltage_baseline)
 ro.set_injection_voltage(voltage_injection)
+if use_hitpix1:
+    ro.set_threshold_voltage(voltage_threshold)
 
 # program DACs
 ro.sm_exec(prog_dac_config(dac_cfg.generate(), 7))
@@ -114,14 +127,12 @@ def run_test(test_row: int, test_col: int, fout : Optional[Any] = None):
         Sleep(50),
         cfg,
     ]
-    for row_inject in range(48):
-        inject_row = 1 << row_inject
-        # for i in range(6):
-        #     inject_row |= 1 << ((8 * i) + row_inject)
+    for row_inject in range(setup.pixel_rows):
+        if row_inject == test_row:
+            continue
         prog_prepare.extend([
             *prog_col_config(setup.encode_column_config(hitpix.HitPixColumnConfig(
-                # inject_row = 0, #all but the test row
-                inject_row = inject_row & ~(1 << test_row), #all but the test row
+                inject_row = 1 << row_inject,
                 inject_col = 1 << test_col,
                 ampout_col = 0,     # no ampout
                 rowaddr = test_row, # disable test row (in case of crosstalk)
@@ -244,6 +255,8 @@ def run_test(test_row: int, test_col: int, fout : Optional[Any] = None):
 
     t_decode.join()
 
-with open('log2.txt', 'wb') as fout:
-    for test_row, test_col in np.ndindex(48, 48):
+with open(sys.argv[1], 'wb') as fout:
+    workload = np.ndindex(setup.pixel_rows, setup.pixel_columns)
+    total = setup.pixel_rows * setup.pixel_columns
+    for test_row, test_col in rich.progress.track(workload, total=total):
         run_test(test_row, test_col, fout)
