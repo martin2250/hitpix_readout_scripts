@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import gzip, base64
@@ -35,8 +36,12 @@ def population_count(x):
         x = (x & m[5]) + ((x >> 32) & m[5])  # put count of each 64 bits into those 64 bits
     return x.astype(dtype)
 
-num_events_per_pixel_put = np.zeros((48, 48))
-num_events_per_pixel_recv = np.zeros((48, 48))
+filename = sys.argv[1] # '../data_climatepi/2022-02-04-climate/duenn2_xtalk/th_offs_04.txt'
+# filename = '../data/2022-01-30/hitpix2-1-crosstalk/log2.txt'
+use_hitpix1 = True
+
+num_events_per_pixel_put = np.zeros((24, 24) if use_hitpix1 else (48, 48))
+num_events_per_pixel_recv = np.zeros((24, 24) if use_hitpix1 else (48, 48))
 num_events_per_ctr = np.zeros(256)
 other_pixels_values = np.zeros(256)
 other_pixels_values_per_ctr = np.zeros((256, 256))
@@ -59,7 +64,6 @@ evts_both_put = 0
 events_total = 0
 events_discarded = 0
 
-filename = '../data/2022-01-30/hitpix2-1-crosstalk/log2.txt'
 
 with open(filename, 'rb') as f:
     for line in f:
@@ -79,11 +83,17 @@ with open(filename, 'rb') as f:
                 base64.b64decode(data)
             ),
             dtype=np.uint8,
-        ).reshape(2, 48, 48)
+        )
+
+        if use_hitpix1:
+            frames = frames.reshape(2, 24, 24)
+        else:
+            frames = frames.reshape(2, 48, 48)
 
         frames_diff = np.diff(frames, axis=0)
 
         # raw counter value before
+        print(frames[0, test_row, test_col])
         num_events_per_ctr[frames[0, test_row, test_col]] += 1
         num_events_per_pixel_put[test_row, test_col] += 1
 
@@ -221,7 +231,7 @@ if False:
     plt.semilogy()
     plt.xlabel('number of adder lines toggled at each hit')
 
-if False:
+if True:
     plt.bar(np.arange(256), num_events_per_ctr / np.sum(num_events_per_ctr), width=1)
     plt.xlabel('counter value before injection')
     plt.semilogy()
