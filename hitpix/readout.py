@@ -35,11 +35,6 @@ class HitPixReadout(Readout):
             if i_slot not in self.dac_cards:
                 self.dac_cards[i_slot] = DacCard(i_slot, 2, 3.3, 1.8, self)
 
-        # set inverted pins
-        self.write_register(self.ADDR_SM_INVERT_PINS, setup.invert_pins)
-
-        self.frequency_mhz = 200
-
     def set_threshold_voltage(self, voltage: float) -> None:
         i_slot, i_chan = self.setup.vc_threshold
         self.dac_cards[i_slot].set_voltage(i_chan, voltage)
@@ -54,6 +49,7 @@ class HitPixReadout(Readout):
 
     def initialize(self) -> None:
         super().initialize()
+        # compare setup and hardware versions
         version = self.get_version()
         if self.setup.chip.version_number != version.chip:
             raise RuntimeError(
@@ -63,7 +59,5 @@ class HitPixReadout(Readout):
                 f'FPGA bitstream adapter version ({version.adapter}) does not match setup ({self.setup.version_number})')
         if (version.readout < 0x010) and (version.chip == 2):
             print('readout version 10+ is recommended for HitPix2!')
-        if version.readout not in [0x008, 0x009, 0x010]:
-            raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
-        if version.readout >= 0x0010:
-            self.frequency_mhz = 100
+        # set inverted pins
+        self.write_register(self.ADDR_SM_INVERT_PINS, self.setup.invert_pins)

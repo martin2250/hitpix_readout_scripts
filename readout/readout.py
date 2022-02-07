@@ -59,6 +59,8 @@ class Readout:
         self._serial_port.set_low_latency_mode(True)
         self._sm_error_count = 0
         self._sm_prog_bits = 12
+        self.frequency_mhz = float('nan')
+        self.frequency_vco_mhz = float('nan')
     
     def close(self) -> None:
         self.event_stop.set()
@@ -188,8 +190,24 @@ class Readout:
             self.fast_tx_flush()
             self._write_function_card_raw(b'\xff')
             self.synchronize()
-            if self.get_version().readout >= 0x0010:
+            # check version
+            version = self.get_version()
+            # supported versions
+            if version.readout not in [0x008, 0x009, 0x010, 0x011]:
+                raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
+            # sm prog
+            if version.readout >= 0x0010:
                 self._sm_prog_bits = 14
+            # frequency
+            if version.readout < 0x0010:
+                self.frequency_mhz = 200
+            elif version.readout == 0x0010:
+                self.frequency_mhz = 100
+            else:
+                self.frequency_vco_mhz = 1200.0
+                if math.isnan(self.frequency_mhz):
+                    self.frequency_mhz = 150.0
+            # check statemachine running
             if not self.get_sm_status().idle:
                 print('init: state machine was still running, aborting')
                 self.sm_abort()
@@ -247,20 +265,24 @@ class Readout:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
     
-    def set_system_clock(self, frequency_mhz: float) -> None:
+    def set_system_clock(self, frequency_mhz: float):
+        '''set system clock frequency to nearest possible value, rounds down and returns actual frequency'''
         assert frequency_mhz < 200.0
-        freq_vco = 1200.0
-        divider = int(math.ceil(freq_vco / frequency_mhz))
+        assert math.isfinite(self.frequency_vco_mhz)
+        # calculate values
+        divider = int(math.ceil(self.frequency_vco_mhz / frequency_mhz))
         cycles_high = divider // 2
         cycles_low = divider - cycles_high
+        # write values to register
         assert cycles_high in range(1 << 6)
         assert cycles_low in range(1 << 6)
         value = (cycles_high << 6) | cycles_low
-        print(f'{cycles_high=} {cycles_low=} {value=:04X}')
         self.write_register(self.ADDR_MMCM_CONFIG, value)
-        #
-        time.sleep(0.5)
-        #
+        # update system frequency
+        self.frequency_mhz = self.frequency_vco_mhz / (cycles_high + cycles_low)
+        print(f'readout: update readout frequency high={cycles_high} low={cycles_low} f={self.frequency_mhz:0.2f}MHz')
+        # wait for hardware and re-initialize
+        time.sleep(0.1)
         self.initialize()
     
     ############################################################################
