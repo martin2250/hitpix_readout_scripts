@@ -95,7 +95,7 @@ with open(output_file, 'w') as f_out:
         for _ in range(10):
             voltage_meas = np.mean(smu.voltage)
             print(f'is {voltage_meas:0.3f}V', end=' ', flush=True)
-            if abs(voltage_meas - voltage) < 0.1:
+            if abs(voltage_meas - voltage) < 0.5:
                 break
             time.sleep(0.05)
         else:
