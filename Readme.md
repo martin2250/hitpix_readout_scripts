@@ -9,5 +9,5 @@ numpy matplotlib pyserial pylibftdi tqdm h5py scipy bitarray cobs
 ```
 ### optional packages:
 ```
-argcomplete PyMeasure python-usbtmc python-vxi11 pyvisa
+argcomplete PyMeasure python-usbtmc python-vxi11 pyvisa rich
 ```
