@@ -1,3 +1,4 @@
+import math
 from typing import Any, Iterable, Union, Optional
 import serial
 from . import instructions
@@ -28,6 +29,7 @@ class Readout:
     ADDR_SM_STATUS         = 0x10
     ADDR_SM_INJECTION_CTRL = 0x11
     ADDR_SM_INVERT_PINS    = 0x12
+    ADDR_MMCM_CONFIG       = 0x20
     ADDR_VERSION           = 0xf0
 
     class ReadoutError(Exception):
@@ -244,6 +246,22 @@ class Readout:
         while self.get_sm_status().active:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
+    
+    def set_system_clock(self, frequency_mhz: float) -> None:
+        assert frequency_mhz < 200.0
+        freq_vco = 1200.0
+        divider = int(math.ceil(freq_vco / frequency_mhz))
+        cycles_high = divider // 2
+        cycles_low = divider - cycles_high
+        assert cycles_high in range(1 << 6)
+        assert cycles_low in range(1 << 6)
+        value = (cycles_high << 6) | cycles_low
+        print(f'{cycles_high=} {cycles_low=} {value=:04X}')
+        self.write_register(self.ADDR_MMCM_CONFIG, value)
+        #
+        time.sleep(0.5)
+        #
+        self.initialize()
     
     ############################################################################
 
