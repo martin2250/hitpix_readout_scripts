@@ -15,7 +15,7 @@ import threading
 import time
 import bitarray.util
 import bitarray
-
+import numpy as np
 import tqdm
 import util.configuration
 from readout.sm_prog import prog_shift_dense, prog_sleep
@@ -31,14 +31,14 @@ from readout.instructions import Finish, GetTime, Reset, SetCfg, SetPins, ShiftO
 
 cfg_setup = 'hitpix1'
 
-# cfg_test_string = bitarray.util.urandom(32)
-cfg_test_string = bitarray.util.hex2ba('deadbeef', endian='little')
-# cfg_test_string = bitarray.util.hex2ba('ff00ff0f', endian='little')
-cfg_shift_clk_div = 2
-cfg_shift_sample_latency = 0
+# cfg_test_string = bitarray.bitarray('00000001001000110100010101100111')
+# cfg_test_string = bitarray.bitarray(bin(0xdeadbeef)[2:])
+cfg_test_string = bitarray.util.urandom(64*40)
+cfg_shift_clk_div = 0
+cfg_shift_sample_latency = 9
 cfg_rounds = 1
 cfg_round_delay = 0.005
-cfg_readout_frequency = 50
+cfg_readout_frequency = 75
 
 ############################################################################
 # open readout
@@ -112,17 +112,16 @@ try:
             print('no fastreadout response!')
             continue
 
-        assert resp.data
+        assert resp.data is not None
+        data = np.frombuffer(resp.data, dtype=np.uint32).byteswap().tobytes()
+        data_ba = bitarray.bitarray(buffer=data)
 
-        data_le = bitarray.bitarray(buffer=resp.data)
-
-        print(data_le[::-1])
-        print(cfg_test_string)
-        # print(resp.data)
+        if data_ba == cfg_test_string:
+            print('ok')
+        else:
+            print('test:', cfg_test_string)
+            print('resp:', data_ba)
         
         time.sleep(cfg_round_delay)
 except KeyboardInterrupt:
     pass
-except Exception as e:
-    print(e)
-    time.sleep(1000)
