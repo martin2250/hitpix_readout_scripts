@@ -1,6 +1,6 @@
 from hitpix import HitPixColumnConfig, ReadoutPins, HitPixSetup
 from readout.instructions import *
-from readout.sm_prog import prog_shift_dense
+from readout.sm_prog import prog_shift_dense, sample_latency
 
 
 def prog_injections_variable(
@@ -42,19 +42,21 @@ def prog_injections_variable(
         shift_select_dac=False,
         shift_word_len=2 * chip.bits_adder,
         shift_clk_div=shift_clk_div,
-        pins=0,
+        shift_sample_latency=sample_latency[shift_clk_div],
     )
+    pins = SetPins(0)
     prog = []
     cfg_col_prep = _get_injection_cc(0, 0)
     prog.extend([
         cfg_int,
+        pins,
         Sleep(pulse_cycles),
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(cfg_col_prep), False),
         Sleep(pulse_cycles),
-        cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
+        pins.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(pulse_cycles),
-        cfg_int,
+        pins,
     ])
     for injection_step in range(injection_steps):
         for row_idx in range(len(rows)):
@@ -73,35 +75,35 @@ def prog_injections_variable(
             cfg_col_inj_next = _get_injection_cc(row_next, injection_step_next)
             prog.extend([
                 # reset counter
-                cfg_int.set_pin(ReadoutPins.ro_rescnt, True),
+                pins.set_pin(ReadoutPins.ro_rescnt, True),
                 Sleep(pulse_cycles),
-                cfg_int,
+                pins,
                 Sleep(pulse_cycles),
                 # set frame high and inject
-                cfg_int.set_pin(ReadoutPins.ro_frame, True),
+                pins.set_pin(ReadoutPins.ro_frame, True),
                 Sleep(pulse_cycles),
                 Inject(num_injections),
                 Sleep(pulse_cycles),
-                cfg_int,
+                pins,
                 Sleep(pulse_cycles),
                 # shift in column config for readout
                 Reset(True, True),
                 *prog_shift_dense(setup.encode_column_config(cfg_col_readout), False),
                 Sleep(pulse_cycles),
-                cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
+                pins.set_pin(ReadoutPins.ro_ldconfig, True),
                 Sleep(pulse_cycles),
-                cfg_int,
+                pins,
                 Sleep(pulse_cycles),
                 # load count into column register
-                cfg_int.set_pin(ReadoutPins.ro_ldcnt, True),
+                pins.set_pin(ReadoutPins.ro_ldcnt, True),
                 Sleep(pulse_cycles),
-                cfg_int,
+                pins,
                 Sleep(pulse_cycles),
-                cfg_int.set_pin(ReadoutPins.ro_penable, True),
+                pins.set_pin(ReadoutPins.ro_penable, True),
                 Sleep(pulse_cycles),
                 ShiftOut(1, False),
                 Sleep(pulse_cycles),
-                cfg_int,
+                pins,
                 Sleep(pulse_cycles),
                 # add time to make readout more consistent
                 GetTime(),
@@ -109,9 +111,9 @@ def prog_injections_variable(
                 Reset(True, True),
                 *prog_shift_dense(setup.encode_column_config(cfg_col_inj_next), True),
                 Sleep(pulse_cycles),
-                cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
+                pins.set_pin(ReadoutPins.ro_ldconfig, True),
                 Sleep(pulse_cycles),
-                cfg_int,
+                pins,
                 Sleep(pulse_cycles),
             ])
     prog.append(Finish())

@@ -29,7 +29,9 @@ class Readout:
     ADDR_SM_STATUS         = 0x10
     ADDR_SM_INJECTION_CTRL = 0x11
     ADDR_SM_INVERT_PINS    = 0x12
-    ADDR_MMCM_CONFIG       = 0x20
+    ADDR_MMCM_CONFIG_0     = 0x20
+    ADDR_MMCM_CONFIG_1     = 0x21
+    ADDR_MMCM_CONFIG_2     = 0x22
     ADDR_VERSION           = 0xf0
 
     class ReadoutError(Exception):
@@ -266,20 +268,21 @@ class Readout:
                 raise TimeoutError('statemachine not idle')
     
     def set_system_clock(self, frequency_mhz: float):
-        '''set system clock frequency to nearest possible value, rounds down'''
+        '''set system clock frequency to nearest possible value
+        param frequency_mhz: bit rate when using lowest divider setting
+        '''
         assert frequency_mhz < 150.0
-        assert math.isfinite(self.frequency_vco_mhz)
-        # calculate values
-        divider = 2 * int(math.ceil(self.frequency_vco_mhz / frequency_mhz / 4))
-        # write values to register
-        assert divider in range(1 << 6)
-        value = (divider << 6) | divider
-        self.write_register(self.ADDR_MMCM_CONFIG, value)
+        from util.xilinx import pll7series
+        # find values for 4x bitrate (output divider is doubled in FPGA)
+        div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 4 * frequency_mhz)
+        print(f'updating readout frequency {div_fb=} {2*div_out=} bitrate={freq_gen/4} Mbit/s')
+        regs = pll7series.get_register_values(div_fb, div_out, 'optimized')
+        for i, val in enumerate(regs):
+            self.write_register(self.ADDR_MMCM_CONFIG_0 + i, val)
         # update system frequency
-        self.frequency_mhz = self.frequency_vco_mhz / (2 * divider)
-        print(f'readout: update readout frequency {2*divider=} f={self.frequency_mhz:0.2f}MHz')
+        self.frequency_mhz = freq_gen / 4
         # wait for hardware and re-initialize
-        time.sleep(0.3)
+        time.sleep(0.5)
         self.fast_tx_flush()
         self.initialize()
     

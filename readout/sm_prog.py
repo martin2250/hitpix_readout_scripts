@@ -6,6 +6,10 @@ import numpy as np
 from .instructions import *
 from hitpix import HitPixColumnConfig, HitPixSetup, ReadoutPins
 
+# index with shift_clk_div
+sample_latency = [
+    9, 9, 9,
+]
 
 def prog_shift_simple(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
     '''shift in data_tx, data_tx[0] first'''
@@ -99,17 +103,19 @@ def prog_dac_config(cfg_dac_bin: bitarray.bitarray, shift_clk_div: int = 7) -> l
         shift_select_dac = True,
         shift_word_len = 31, # rx not used
         shift_clk_div = shift_clk_div,
-        pins = 0,
+        shift_sample_latency=sample_latency[shift_clk_div],
     )
+    pins = SetPins(0)
     return [
         cfg_int,
+        pins,
         Reset(True, True),
         Sleep(100),
         *prog_shift_dense(cfg_dac_bin, False),
         Sleep(100),
-        cfg_int.set_pin(ReadoutPins.dac_ld, True),
+        pins.set_pin(ReadoutPins.dac_ld, True),
         Sleep(100),
-        cfg_int,
+        pins,
     ]
 
 def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7, shift_out_bits: Optional[int] = None) -> list[Instruction]:
@@ -120,17 +126,19 @@ def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7, shif
         shift_select_dac = False,
         shift_word_len = shift_out_bits or 32,
         shift_clk_div = shift_clk_div,
-        pins = 0,
+        shift_sample_latency=sample_latency[shift_clk_div],
     )
+    pins = SetPins(0)
     return [
         cfg_int,
+        pins,
         Reset(True, True),
         Sleep(50),
         *prog_shift_dense(cfg_col_bin, shift_out_bits is not None),
         Sleep(50),
-        cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
+        pins.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(50),
-        cfg_int,
+        pins,
     ]
 
 def prog_read_matrix(setup: HitPixSetup, shift_clk_div: int = 1, pulse_cycles: int = 50, rows: Optional[list[int]] = None) -> list[Instruction]:
@@ -147,8 +155,9 @@ def prog_read_matrix(setup: HitPixSetup, shift_clk_div: int = 1, pulse_cycles: i
         shift_select_dac=False,
         shift_word_len=2 * chip.bits_adder,
         shift_clk_div=shift_clk_div,
-        pins=0,
+        shift_sample_latency=sample_latency[shift_clk_div],
     )
+    pins = SetPins(0)
 
     # init
     prog = [
@@ -162,18 +171,20 @@ def prog_read_matrix(setup: HitPixSetup, shift_clk_div: int = 1, pulse_cycles: i
     for row_next in rows_next:
         # readout
         prog.extend([
+            cfg_int,
+            pins,
             # prepend row with time
             GetTime(),
             # load count into column register
-            cfg_int.set_pin(ReadoutPins.ro_ldcnt, True),
+            pins.set_pin(ReadoutPins.ro_ldcnt, True),
             Sleep(pulse_cycles),
-            cfg_int,
+            pins,
             Sleep(pulse_cycles),
-            cfg_int.set_pin(ReadoutPins.ro_penable, True),
+            pins.set_pin(ReadoutPins.ro_penable, True),
             Sleep(pulse_cycles),
             ShiftOut(1, False),
             Sleep(pulse_cycles),
-            cfg_int,
+            pins,
             Sleep(pulse_cycles),
             # shift out data of current row and shift in next row
             *prog_col_config(
