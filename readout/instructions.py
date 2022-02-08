@@ -39,13 +39,13 @@ class SetCfg(Instruction):
     shift_select_dac: bool
     shift_word_len: int
     shift_clk_div: int
-    pins: int
+    shift_sample_latency: int
     
     def to_binary(self) -> int:
         assert self.shift_clk_div in range(1 << 3)
         assert (self.shift_word_len - 1) in range(1 << 5)
-        assert self.pins in range(1 << 12) # change when adding additional config
-        instr_mask = 0b00010011 << 24
+        assert self.shift_sample_latency in range(1 << 5)
+        instr_mask = 0b00010110 << 24
 
         instr_mask |= self.shift_rx_invert << 23
         instr_mask |= self.shift_tx_invert << 22
@@ -53,7 +53,7 @@ class SetCfg(Instruction):
         instr_mask |= self.shift_select_dac << 20
         instr_mask |= (self.shift_word_len - 1) << 15
         instr_mask |= self.shift_clk_div << 12
-        instr_mask |= self.pins
+        instr_mask |= self.shift_sample_latency
 
         return instr_mask
     
@@ -65,18 +65,26 @@ class SetCfg(Instruction):
             self.shift_select_dac,
             self.shift_word_len,
             self.shift_clk_div,
-            self.pins,
+            self.shift_sample_latency,
         )
         for k, v in kwargs.items():
             s.__setattr__(k, v)
         return s
 
-    def set_pin(self, pin_number: int, value: bool) -> 'SetCfg':
-        assert pin_number < 12 
+@dataclass
+class SetPins(Instruction):
+    pins: int
+    
+    def to_binary(self) -> int:
+        assert self.pins in range(1 << 24) # change when adding additional config
+        return (0b00010011 << 24) | self.pins
+    
+    def set_pin(self, pin_number: int, value: bool) -> 'SetPins':
+        assert pin_number < 24
         if value:
-            return self.modify(pins=(self.pins | (1 << pin_number)))
+            return SetPins(self.pins | (1 << pin_number))
         else:
-            return self.modify(pins=(self.pins & ~(1 << pin_number)))
+            return SetPins(self.pins & ~(1 << pin_number))
 
     def get_pin(self, pin_number: int) -> bool:
         return (self.pins & (1 << pin_number)) != 0
@@ -124,17 +132,6 @@ class ShiftOut(Instruction):
         instr_mask = 0b1111001 << 25
         instr_mask |= self.shift_out << 24
         instr_mask |= (self.num_bits - 1)
-        return instr_mask
-
-@dataclass
-class Repeat(Instruction):
-    '''repeat next instruction <repeat_count> times'''
-    repeat_count: int
-    
-    def to_binary(self) -> int:
-        assert (self.repeat_count - 2) in range(1 << 12)
-        instr_mask = 0b00010000 << 24
-        instr_mask |= (self.repeat_count - 2)
         return instr_mask
 
 @dataclass

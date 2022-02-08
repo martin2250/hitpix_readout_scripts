@@ -193,7 +193,7 @@ class Readout:
             # check version
             version = self.get_version()
             # supported versions
-            if version.readout not in [0x008, 0x009, 0x010, 0x011]:
+            if version.readout not in [0x008, 0x009, 0x010, 0x012]:
                 raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
             # sm prog
             if version.readout >= 0x0010:
@@ -266,23 +266,21 @@ class Readout:
                 raise TimeoutError('statemachine not idle')
     
     def set_system_clock(self, frequency_mhz: float):
-        '''set system clock frequency to nearest possible value, rounds down and returns actual frequency'''
-        assert frequency_mhz < 200.0
+        '''set system clock frequency to nearest possible value, rounds down'''
+        assert frequency_mhz < 150.0
         assert math.isfinite(self.frequency_vco_mhz)
         # calculate values
-        divider = int(math.ceil(self.frequency_vco_mhz / frequency_mhz))
-        cycles_high = divider // 2
-        cycles_low = divider - cycles_high
+        divider = 2 * int(math.ceil(self.frequency_vco_mhz / frequency_mhz / 4))
         # write values to register
-        assert cycles_high in range(1 << 6)
-        assert cycles_low in range(1 << 6)
-        value = (cycles_high << 6) | cycles_low
+        assert divider in range(1 << 6)
+        value = (divider << 6) | divider
         self.write_register(self.ADDR_MMCM_CONFIG, value)
         # update system frequency
-        self.frequency_mhz = self.frequency_vco_mhz / (cycles_high + cycles_low)
-        print(f'readout: update readout frequency high={cycles_high} low={cycles_low} f={self.frequency_mhz:0.2f}MHz')
+        self.frequency_mhz = self.frequency_vco_mhz / (2 * divider)
+        print(f'readout: update readout frequency {2*divider=} f={self.frequency_mhz:0.2f}MHz')
         # wait for hardware and re-initialize
-        time.sleep(0.1)
+        time.sleep(0.3)
+        self.fast_tx_flush()
         self.initialize()
     
     ############################################################################
