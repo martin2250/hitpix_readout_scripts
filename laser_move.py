@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import os
+if True:
+    os.environ['QT_QPA_PLATFORM']='xcb'
 from typing import Any
 import lasersetup.laser
 import lasersetup.motion
@@ -243,7 +245,7 @@ if __name__ == '__main__':
         vssa_channel = util.voltage_channel.open_voltage_channel(
             vssa_driver, 'VSSA')
 
-        atexit.register(lambda: prints('shutting down HV') or hv_channel.shutdown)
+        atexit.register(lambda: prints('shutting down HV') or hv_channel.shutdown())
 
         def set_voltages(config: FrameConfig):
             hv_channel.set_voltage(config.voltage_hv)
