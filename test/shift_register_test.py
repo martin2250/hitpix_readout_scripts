@@ -38,7 +38,7 @@ cfg_shift_clk_div = 0
 cfg_shift_sample_latency = 9
 cfg_rounds = 1
 cfg_round_delay = 0.005
-cfg_readout_frequency = 75
+cfg_readout_frequency = 78
 
 ############################################################################
 # open readout
@@ -117,10 +117,10 @@ try:
         data_ba = bitarray.bitarray(buffer=data)
 
         if data_ba == cfg_test_string:
-            print('ok')
+            print('.', end='', flush=True)
         else:
-            print('test:', cfg_test_string)
-            print('resp:', data_ba)
+            print('test:', cfg_test_string[:50])
+            print('resp:', data_ba[:50])
         
         time.sleep(cfg_round_delay)
 except KeyboardInterrupt:

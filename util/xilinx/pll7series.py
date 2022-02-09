@@ -52,6 +52,7 @@ def get_register_values(div_fb: float, div_serdes: int, bandwidth: Literal['low'
     even_part_low = even_part_high
     odd = clkout0_divide_int - even_part_high - even_part_low
     odd_and_frac = (8*odd) + clkout0_divide_frac
+    print(f'{even_part_high=} {even_part_low=} {odd_and_frac=}')
     lt_frac = even_part_high - (odd_and_frac <= 9)
     ht_frac = even_part_low  - (odd_and_frac <= 8)
 
@@ -70,8 +71,11 @@ def get_register_values(div_fb: float, div_serdes: int, bandwidth: Literal['low'
     # pm_fall_frac_filtered	= pm_fall + pm_rise_frac - {pm_fall_frac[7:3], 3'b000}
     pm_fall_frac_filtered	= pm_fall + pm_rise_frac - (pm_fall_frac & 0b11111000)
 
+
+    print(f'{clkout0_divide_frac=} {ht_frac=} {lt_frac=}')
+
     part_mmcm_clkfb_shared = ((pm_fall_frac_filtered & 0x7) << 1) | wf_fall_frac
-    part_mmcm_clkfb_reg2 = ((clkout0_divide_frac & 0x7) << 12) | (wf_rise_frac << 10)
+    part_mmcm_clkfb_reg2 = ((clkout0_divide_frac & 0x7) << 12) | (1 << 11) | (wf_rise_frac << 10)
     part_mmcm_clkfb_reg1 = ((pm_rise_frac_filtered & 0x7) << 13) | ((ht_frac & 0x3f) << 6) | (lt_frac & 0x3f)
     val_lock = _table_lock[clkout0_divide_int]
     val_filter = _tables_filter[bandwidth][clkout0_divide_int]
