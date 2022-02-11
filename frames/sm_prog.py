@@ -1,6 +1,6 @@
 from hitpix import HitPixColumnConfig, HitPixSetup, ReadoutPins
 from readout.instructions import *
-from readout.sm_prog import prog_shift_dense, prog_sleep
+from readout.sm_prog import prog_shift_dense, prog_sleep, sample_latency
 
 
 def prog_read_frames(
@@ -22,28 +22,33 @@ def prog_read_frames(
         shift_select_dac=False,
         shift_word_len=2 * chip.bits_adder,
         shift_clk_div=shift_clk_div,
-        pins=0,
+        shift_sample_latency=sample_latency[shift_clk_div],
     )
+    pins = SetPins(0)
 
     # init
     col_cfg_init = HitPixColumnConfig(0, 0, 0, -1)
     prog_init = [
         Reset(True, True),
-        *prog_shift_dense(setup.encode_column_config(col_cfg_init), False),
-        cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
-        Sleep(pulse_cycles),
         cfg_int,
+        pins,
+        *prog_shift_dense(setup.encode_column_config(col_cfg_init), False),
+        pins.set_pin(ReadoutPins.ro_ldconfig, True),
+        Sleep(pulse_cycles),
+        pins,
     ]
 
     # readout
-    prog = []
+    prog: list[Instruction] = [
+        cfg_int
+    ]
     # reset counter every frame?
     if reset_counters:
         prog.extend([
             # reset counters
-            cfg_int.set_pin(ReadoutPins.ro_rescnt, True),
+            pins.set_pin(ReadoutPins.ro_rescnt, True),
             Sleep(pulse_cycles),
-            cfg_int,
+            pins,
             Sleep(pulse_cycles),
         ])
 
@@ -51,9 +56,9 @@ def prog_read_frames(
         # wait (empty if pause_cycles = 0)
         *prog_sleep(pause_cycles),
         # take data
-        cfg_int.set_pin(ReadoutPins.ro_frame, True),
+        pins.set_pin(ReadoutPins.ro_frame, True),
         *prog_sleep(frame_cycles),
-        cfg_int,
+        pins,
         Sleep(pulse_cycles),
     ])
 
@@ -67,24 +72,24 @@ def prog_read_frames(
             Reset(True, True),
             *prog_shift_dense(setup.encode_column_config(col_cfg), row > 0),
             Sleep(pulse_cycles),
-            cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
+            pins.set_pin(ReadoutPins.ro_ldconfig, True),
             Sleep(pulse_cycles),
-            cfg_int,
+            pins,
             Sleep(pulse_cycles),
         ])
         if row == chip.rows:
             break
         prog.extend([
             # load count into column register
-            cfg_int.set_pin(ReadoutPins.ro_ldcnt, True),
+            pins.set_pin(ReadoutPins.ro_ldcnt, True),
             Sleep(pulse_cycles),
-            cfg_int,
+            pins,
             Sleep(pulse_cycles),
-            cfg_int.set_pin(ReadoutPins.ro_penable, True),
+            pins.set_pin(ReadoutPins.ro_penable, True),
             Sleep(pulse_cycles),
             ShiftOut(1, False),
             Sleep(pulse_cycles),
-            cfg_int,
+            pins,
             Sleep(pulse_cycles),
         ])
 

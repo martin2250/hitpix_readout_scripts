@@ -60,10 +60,10 @@ class FastReadout:
                     response = self._response_queue.get(False)
                     response.data = cobs.decode(packet)
                     response.event.set()
-                    first_packet = False
                 except queue.Empty:
                     if not first_packet:
                         print('fastro: received unexpected response', packet)
+                first_packet = False
         t_end = time.perf_counter()
         t_diff = t_end - t_start
         mb_tot = n_tot / 1024**2
