@@ -271,7 +271,7 @@ class Readout:
         '''set system clock frequency to nearest possible value
         param frequency_mhz: bit rate when using lowest divider setting
         '''
-        assert frequency_mhz < 150.0
+        assert frequency_mhz <= 150.0
         from util.xilinx import pll7series
         # find values for 4x bitrate (output divider is doubled in FPGA)
         div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 4 * frequency_mhz)
