@@ -8,7 +8,7 @@ def __get_config_dict_ext() -> dict:
         'pause_us': 0.0,
         'hv': 5.0,
         'reset_counters': 0,
-        'frequency': 25.0,
+        'frequency': 75.0,
     }
 
 

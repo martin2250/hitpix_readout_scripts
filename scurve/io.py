@@ -26,7 +26,7 @@ class SCurveConfig:
     rows: np.ndarray # [Any,np.dtype[np.uint]] works only in np 1.22
     simultaneous_injections: int
 
-    shift_clk_div: int = 0
+    readout_frequency: float
     injection_delay: float = 0.01  # DACs needs around 3ms
 
 
@@ -54,6 +54,10 @@ class SCurveConfig:
             d['rows'] = [-1]
         rows = np.array(d['rows'], dtype=np.uint)
         del d['rows']
+        if 'shift_clk_div' in d:
+            del d['shift_clk_div']
+        if not 'readout_frequency' in d:
+            d['readout_frequency'] = 25.0
         return SCurveConfig(
             dac_cfg=dac_cfg,
             injection_voltage=injection_voltage,

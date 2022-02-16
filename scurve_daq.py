@@ -6,6 +6,7 @@ def __get_config_dict_ext() -> dict:
         'pulse_us': 2.5,
         'pause_us': 17.5,
         'simultaneous_injections': -2,
+        'frequency': 75.0,
     }
 
 def main(
@@ -90,6 +91,7 @@ def main(
             injections_total=injections_total,
             injection_pulse_us=scan_dict['pulse_us'],
             injection_pause_us=scan_dict['pause_us'],
+            readout_frequency=scan_dict['frequency'],
             setup_name=setup_name,
             rows=rows,
             simultaneous_injections=simultaneous_injections,

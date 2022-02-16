@@ -1,4 +1,5 @@
 import math
+import traceback
 from typing import Any, Iterable, Union, Optional
 import serial
 from . import instructions
@@ -50,7 +51,7 @@ class Readout:
             code_str = self.errors.get(code, f'0x{code:02X}')
             super().__init__(f'readout error code {code_str}')
 
-    def __init__(self, serial_name: str, timeout: float = 0.5) -> None:
+    def __init__(self, serial_name: str, timeout: float = 1.5) -> None:
         self._serial_port = serial.Serial(serial_name, 3_000_000)
         self._response_queue: queue.Queue[Response] = queue.Queue()
         self.event_stop = threading.Event()
@@ -88,13 +89,23 @@ class Readout:
             for packet in packets:
                 try:
                     response = self._response_queue.get(False)
+                    # print(response.name, packet[:8].hex())
                     response.data = packet
                     response.event.set()
                 except queue.Empty:
                     print('readout received unexpected response', packet)
     
-    def _expect_response(self) -> Response:
-        response = Response()
+    def _expect_response(self, name: Optional[str] = None) -> Response:
+        if not name:
+            lines = '\n'.join(traceback.format_stack())
+            stack = []
+            for s in lines.splitlines():
+                s = s.strip()
+                if not s or s.startswith('File'):
+                    continue
+                stack.append(s)
+            name = '::'.join(stack)
+        response = Response(name=name)
         self._response_queue.put(response)
         return response
 
@@ -286,7 +297,11 @@ class Readout:
         self.frequency_mhz = freq_gen / 4
         self.frequency_mhz_set = frequency_mhz
         # wait for hardware and re-initialize
-        time.sleep(0.1)
+        time.sleep(0.8)
+        try:
+            while True: self._response_queue.get_nowait()
+        except queue.Empty:
+            pass
         # self.fast_tx_flush()
         self.initialize()
         return self.frequency_mhz

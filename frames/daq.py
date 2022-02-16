@@ -57,8 +57,9 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     # set up readout
 
     if ro.frequency_mhz_set != config.readout_frequency:
-        ro.set_system_clock(config.readout_frequency)
-        config.readout_frequency = ro.frequency_mhz
+        print(f'setting frequency to {config.readout_frequency=}')
+        config.readout_frequency = ro.set_system_clock(config.readout_frequency)
+        print(f'actual: {config.readout_frequency}')
 
     ############################################################################
     # configure readout & chip
@@ -71,7 +72,6 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     time.sleep(0.025)
 
     setup = ro.setup
-
 
     ############################################################################
     # prepare statemachine

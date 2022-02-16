@@ -3,6 +3,7 @@ import argparse
 from typing import Any
 
 import h5py
+import matplotlib
 from matplotlib.backend_bases import MouseEvent
 import matplotlib.pyplot as plt
 import numpy as np
@@ -122,7 +123,7 @@ if __name__ == '__main__':
         sliders[id_slider].label.set_backgroundcolor('lightgreen')
 
     # data ranges
-    range_hits_full = max(np.min(hits_frames), 10), np.max(hits_frames)
+    range_hits_full = max(np.min(hits_frames), 10), max(np.max(hits_frames), 20)
     range_hits = range_hits_full
 
     # plot histograms
@@ -139,10 +140,12 @@ if __name__ == '__main__':
         ax_hist.set_ylim(0, np.max(data_hits))
 
     # plot maps
+    import matplotlib.colors
     im_hits = ax_map.imshow(
         np.flip(hits_frames[idx_scan], axis=1),
-        vmin=range_hits[0],
-        vmax=range_hits[1],
+        # vmin=range_hits[0],
+        # vmax=range_hits[1],
+        norm=matplotlib.colors.LogNorm(max(range_hits[0], 1), max(range_hits[1], 5))
     )
     ax_map.set_title('Hits / Pixel / s')
     fig.colorbar(im_hits, ax=ax_map)

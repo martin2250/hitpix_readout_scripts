@@ -6,3 +6,4 @@ from typing import Optional
 class Response:
     data: Optional[bytes] = None
     event: threading.Event = field(default_factory=lambda: threading.Event())
+    name: Optional[str] = None

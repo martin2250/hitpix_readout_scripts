@@ -1,15 +1,15 @@
 from hitpix import HitPixColumnConfig, ReadoutPins, HitPixSetup
 from readout.instructions import *
-from readout.sm_prog import prog_shift_dense, sample_latency
+from readout.sm_prog import prog_shift_dense
 
 
 def prog_injections_variable(
     num_injections: int,
-    shift_clk_div: int,
     pulse_cycles: int,
     setup: HitPixSetup,
     rows: list[int],
     simultaneous_injections: int,
+    frequency: float,
 ) -> list[Instruction]:
     # parameters
     chip = setup.chip
@@ -41,8 +41,8 @@ def prog_injections_variable(
         shift_toggle=True,
         shift_select_dac=False,
         shift_word_len=2 * chip.bits_adder,
-        shift_clk_div=shift_clk_div,
-        shift_sample_latency=sample_latency[shift_clk_div],
+        shift_clk_div=0,
+        shift_sample_latency=setup.get_readout_latency(0, frequency),
     )
     pins = SetPins(0)
     prog = []

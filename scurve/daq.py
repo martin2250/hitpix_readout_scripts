@@ -14,6 +14,14 @@ from .sm_prog import prog_injections_variable
 
 def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveConfig, progress: Optional[tqdm.tqdm] = None) -> tuple[np.ndarray, Optional[np.ndarray]]:
     ############################################################################
+    # set up readout
+
+    if ro.frequency_mhz_set != config.readout_frequency:
+        print(f'setting frequency to {config.readout_frequency=}')
+        config.readout_frequency = ro.set_system_clock(config.readout_frequency)
+        print(f'actual: {config.readout_frequency}')
+
+    ############################################################################
     # calculations
     setup = ro.setup
 
@@ -32,7 +40,7 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
     ro.set_threshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
-    ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate()))
 
     time.sleep(0.025)
 
@@ -41,11 +49,11 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
 
     prog_injection = prog_injections_variable(
         num_injections=config.injections_per_round,
-        shift_clk_div=config.shift_clk_div,
         pulse_cycles=50,
         setup=ro.setup,
         rows=[int(row) for row in config.rows], # np.uint64 to python int
         simultaneous_injections=config.simultaneous_injections,
+        frequency=config.readout_frequency,
     )
     prog_injection.append(Finish())
     ro.sm_write(prog_injection)
