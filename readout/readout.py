@@ -62,7 +62,7 @@ class Readout:
         self._sm_error_count = 0
         self._sm_prog_bits = 12
         self.frequency_mhz = float('nan')
-        self.frequency_vco_mhz = float('nan')
+        self.frequency_mhz_set = float('nan')
     
     def close(self) -> None:
         self.event_stop.set()
@@ -203,12 +203,14 @@ class Readout:
             # frequency
             if version.readout < 0x0010:
                 self.frequency_mhz = 200
+                self.frequency_mhz_set = 200
             elif version.readout == 0x0010:
                 self.frequency_mhz = 100
+                self.frequency_mhz_set = 100
             else:
-                self.frequency_vco_mhz = 1200.0
                 if math.isnan(self.frequency_mhz):
                     self.frequency_mhz = 150.0
+                    self.frequency_mhz_set = 150.0
             # check statemachine running
             if not self.get_sm_status().idle:
                 print('init: state machine was still running, aborting')
@@ -281,6 +283,7 @@ class Readout:
             self.write_register(self.ADDR_MMCM_CONFIG_0 + i, val)
         # update system frequency
         self.frequency_mhz = freq_gen / 4
+        self.frequency_mhz_set = frequency_mhz
         # wait for hardware and re-initialize
         time.sleep(0.5)
         self.fast_tx_flush()

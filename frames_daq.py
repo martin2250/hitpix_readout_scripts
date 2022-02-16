@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from sys import path
 from typing import Literal, Optional, cast, Any
 
 
@@ -9,6 +8,7 @@ def __get_config_dict_ext() -> dict:
         'pause_us': 0.0,
         'hv': 5.0,
         'reset_counters': 0,
+        'frequency': 25.0,
     }
 
 
@@ -71,6 +71,7 @@ def main(
             num_frames=num_frames,
             frame_length_us=config_dict['frame_us'],
             pause_length_us=config_dict['pause_us'],
+            readout_frequency=config_dict['frequency'],
             read_adders=read_adders,
             reset_counters=bool(config_dict['reset_counters']),
             setup_name=setup_name,

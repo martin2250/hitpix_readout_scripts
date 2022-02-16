@@ -54,26 +54,35 @@ def _decode_responses(
 
 def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None, callback = None) -> tuple[np.ndarray, np.ndarray]:
     ############################################################################
+    # set up readout
+
+    if ro.frequency_mhz_set != config.readout_frequency:
+        ro.set_system_clock(config.readout_frequency)
+        config.readout_frequency = ro.frequency_mhz
+
+    ############################################################################
     # configure readout & chip
 
     ro.set_threshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
-    ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate()))
 
     time.sleep(0.025)
 
     setup = ro.setup
 
+
     ############################################################################
     # prepare statemachine
+
     prog_init, prog_readout = prog_read_frames(
         frame_cycles=int(ro.frequency_mhz * config.frame_length_us),
         pulse_cycles=50,
-        shift_clk_div=config.shift_clk_div,
         pause_cycles=int(ro.frequency_mhz * config.pause_length_us),
         reset_counters=config.reset_counters,
         setup=setup,
+        frequency=config.readout_frequency,
     )
     prog_readout.append(Finish())
 
