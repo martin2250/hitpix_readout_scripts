@@ -59,6 +59,8 @@ class HitPixSetup:
     invert_pins: int
     version_number: int
 
+    get_readout_latency: Callable[[int, float], int]
+
     vc_baseline: tuple[int, int]  # card slot, channel
     vc_threshold: tuple[int, int]  # card slot, channel
     vc_injection: tuple[int, int]  # card slot, channel
@@ -74,8 +76,7 @@ class HitPixSetup:
         '''simply repeats column config x times'''
         assert self.chip_rows == 1
         return self.chip.encode_column_config(conf) * self.chip_columns
-
-
+    
 ################################################################################
 # helper methods
 
@@ -110,6 +111,28 @@ def encode_column_config_hitpix1(conf: HitPixColumnConfig) -> bitarray.bitarray:
 
     b.reverse()
     return b
+
+def get_readout_latency_hitpix1(clk_div: int, frequency: float) -> int:
+    if clk_div == 0:
+        if frequency < 45.0:
+            return 7
+        elif frequency < 60.0:
+            return 8
+        elif frequency < 85.0:
+            return 9
+        else:
+            return 10
+    elif clk_div == 1:
+        if frequency < 75.0:
+            return 7
+        elif frequency < 100.0:
+            return 8
+        else:
+            return 9
+    elif clk_div == 2:
+        return 5
+
+    raise ValueError('no data for this configuration')
 
 @dataclass
 class HitPix1DacConfig(HitPixDacConfig):
@@ -180,6 +203,7 @@ hitpix1_single = HitPixSetup(
     vc_baseline=(0, 4),
     vc_threshold=(0, 1),
     vc_injection=(2, 0),
+    get_readout_latency=get_readout_latency_hitpix1,
 )
 
 ################################################################################
@@ -207,6 +231,19 @@ def encode_column_config_hitpix2(conf: HitPixColumnConfig) -> bitarray.bitarray:
 
     b.reverse()
     return b
+
+def get_readout_latency_hitpix2(clk_div: int, frequency: float) -> int:
+    if clk_div == 0:
+        if frequency < 32:
+            return 8
+        else:
+            return 9
+    elif clk_div == 1:
+        return 8
+    elif clk_div == 2:
+        return 8
+
+    raise ValueError('no data for this configuration')
 
 @dataclass
 class HitPix2DacConfig(HitPixDacConfig):
@@ -292,6 +329,7 @@ hitpix2_single = HitPixSetup(
     vc_baseline=(1, 4),
     vc_threshold=(1, 1),
     vc_injection=(2, 0),
+    get_readout_latency=get_readout_latency_hitpix2,
 )
 
 hitpix2_row = HitPixSetup(
@@ -304,6 +342,7 @@ hitpix2_row = HitPixSetup(
     vc_baseline=(-1, -1),
     vc_threshold=(-1, -1),
     vc_injection=(-1, -1),
+    get_readout_latency=get_readout_latency_hitpix2,
 )
 
 # keep in sync with defaults.py!!

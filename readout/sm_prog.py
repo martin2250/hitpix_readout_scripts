@@ -6,10 +6,6 @@ import numpy as np
 from .instructions import *
 from hitpix import HitPixColumnConfig, HitPixSetup, ReadoutPins
 
-# index with shift_clk_div
-sample_latency = [
-    9, 9, 9,
-]
 
 def prog_shift_simple(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instruction]:
     '''shift in data_tx, data_tx[0] first'''
@@ -95,15 +91,15 @@ def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13
     # counter count down
     return timestamps, hits
 
-def prog_dac_config(cfg_dac_bin: bitarray.bitarray, shift_clk_div: int = 7) -> list[Instruction]:
+def prog_dac_config(cfg_dac_bin: bitarray.bitarray) -> list[Instruction]:
     cfg_int = SetCfg(
         shift_rx_invert = False, # rx not used
         shift_tx_invert = True,
         shift_toggle = False,
         shift_select_dac = True,
         shift_word_len = 31, # rx not used
-        shift_clk_div = shift_clk_div,
-        shift_sample_latency=sample_latency[shift_clk_div],
+        shift_clk_div = 2,
+        shift_sample_latency=0, # no data shifted out
     )
     pins = SetPins(0)
     return [

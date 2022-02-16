@@ -1,14 +1,14 @@
 from hitpix import HitPixColumnConfig, HitPixSetup, ReadoutPins
 from readout.instructions import *
-from readout.sm_prog import prog_shift_dense, prog_sleep, sample_latency
+from readout.sm_prog import prog_shift_dense, prog_sleep
 
 
 def prog_read_frames(
     frame_cycles: int,
     pulse_cycles: int,
-    shift_clk_div: int,
     pause_cycles: int,
     reset_counters: bool,
+    frequency: float,
     setup: HitPixSetup,
 ) -> tuple[list[Instruction], list[Instruction]]:
     '''returns programs (init and readout)'''
@@ -21,8 +21,8 @@ def prog_read_frames(
         shift_toggle=True,
         shift_select_dac=False,
         shift_word_len=2 * chip.bits_adder,
-        shift_clk_div=shift_clk_div,
-        shift_sample_latency=sample_latency[shift_clk_div],
+        shift_clk_div=0,
+        shift_sample_latency=setup.get_readout_latency(0, frequency),
     )
     pins = SetPins(0)
 
