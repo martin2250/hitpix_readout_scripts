@@ -29,16 +29,9 @@ from readout.instructions import Finish, GetTime, Reset, SetCfg, SetPins, ShiftO
 
 ############################################################################
 
-cfg_setup = 'hitpix1'
-
-# cfg_test_string = bitarray.bitarray('00000001001000110100010101100111')
-# cfg_test_string = bitarray.bitarray(bin(0xdeadbeef)[2:])
-cfg_test_string = bitarray.util.urandom(64*40)
-cfg_shift_clk_div = 0
-cfg_shift_sample_latency = 9
-cfg_rounds = 1
-cfg_round_delay = 0.005
-cfg_readout_frequency = 78
+cfg_setup = 'hitpix2-1x1'
+cfg_voltage = 1.85
+cfg_clkdiv = 2
 
 ############################################################################
 # open readout
@@ -54,74 +47,129 @@ ro = HitPixReadout(serial_port_name, hitpix.setups[cfg_setup])
 ro.initialize()
 atexit.register(ro.close)
 
-ro.set_system_clock(cfg_readout_frequency)
+vdd_channel = util.voltage_channel.open_voltage_channel(
+    board.default_vdd_driver,
+    'VDD',
+)
+vdd_channel.set_voltage(cfg_voltage)
 
 ############################################################################
 # readout program
 
-cfg = SetCfg(
-    shift_rx_invert = True,
-    shift_tx_invert = False,
-    shift_toggle = False,
-    shift_select_dac = False,
-    shift_word_len = 32,
-    shift_clk_div = cfg_shift_clk_div,
-    shift_sample_latency=cfg_shift_sample_latency,
-)
-pins = SetPins(0)
+def test_shift_register(
+    ro: HitPixReadout,
+    shift_clk_div: int,
+    shift_sample_latency: int,
+    test_string: bitarray.bitarray,
+    num_rounds: int,
+) -> bitarray.bitarray:
+    cfg = SetCfg(
+        shift_rx_invert = True,
+        shift_tx_invert = False,
+        shift_toggle = False,
+        shift_select_dac = False,
+        shift_word_len = 32,
+        shift_clk_div = shift_clk_div,
+        shift_sample_latency=shift_sample_latency,
+    )
+    pins = SetPins(0)
 
-num_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
+    setup_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
 
-if len(cfg_test_string) >= num_registers:
-    prog = [
-        cfg,
-        pins,
-        Reset(True, True),
-        Sleep(3),
-        *prog_shift_dense(cfg_test_string[:num_registers], False),
-        *prog_shift_dense(cfg_test_string[num_registers:], True),
-        ShiftOut(num_registers, True),
-        *prog_sleep(int(10e3 * ro.frequency_mhz)),
-    ]
-else:
-    prog = [
-        cfg,
-        pins,
-        Reset(True, True),
-        Sleep(3),
-        *prog_shift_dense(cfg_test_string, False),
-        ShiftOut(num_registers - len(cfg_test_string), False),
-        ShiftOut(len(cfg_test_string), True),
-        *prog_sleep(int(10e3 * ro.frequency_mhz)),
-    ]
+    if len(test_string) >= setup_registers:
+        prog = [
+            cfg,
+            pins,
+            Reset(True, True),
+            Sleep(3),
+            *prog_shift_dense(test_string[:setup_registers], False),
+            *prog_shift_dense(test_string[setup_registers:], True),
+            ShiftOut(setup_registers, True),
+            *prog_sleep(int(10e3 * ro.frequency_mhz)),
+        ]
+    else:
+        prog = [
+            cfg,
+            pins,
+            Reset(True, True),
+            Sleep(3),
+            *prog_shift_dense(test_string, False),
+            ShiftOut(setup_registers - len(test_string), False),
+            ShiftOut(len(test_string), True),
+            *prog_sleep(int(10e3 * ro.frequency_mhz)),
+        ]
 
-ro.sm_write(prog + [Finish()])
+    ro.sm_write(prog + [Finish()])
 
-############################################################################
+    resp = fastreadout.expect_response()
+    
+    ############################################################################
 
-# time.sleep(10)
+    ro.sm_start(num_rounds)
+    ro.wait_sm_idle(5.0)
 
-try:
-    while True:
-        resp = fastreadout.expect_response()
+    if not resp.event.wait(5):
+        raise TimeoutError('no fastreadout response!')
+
+    assert resp.data is not None
+    data = np.frombuffer(resp.data, dtype=np.uint32).byteswap().tobytes()
+    return bitarray.bitarray(buffer=data).copy()
+
+################################################################################
+
+# find all frequencies supported by readout
+frequencies = []
+f_last = 0
+for f in np.linspace(20, 150, 100):
+    f_new = ro.set_system_clock(f, dry_run=True)
+    if f_new == f_last:
+        continue
+    f_last = f_new
+    frequencies.append(float(f_new))
+
+################################################################################
+
+shift_latencies = list(range(0, 19))
+test_string = bitarray.util.urandom(1024)
+
+with open(f'latency_scan_clkdiv{cfg_clkdiv}_{int(cfg_voltage*1e3)}.dat', 'w') as f_out:
+    print(f'# latency scan', file=f_out)
+    print(f'# {cfg_setup=}', file=f_out)
+    print(f'# latencies\t' + '\t'.join(str(int(l)) for l in shift_latencies), file=f_out)
+    print(f'# frequency (MHz)\t' + '\t'.join(f'errors ({l:d})' for l in shift_latencies), file=f_out)
         
-        ro.sm_start(cfg_rounds)
-        ro.wait_sm_idle(5.0)
+    for freq in frequencies:
+        ro.set_system_clock(freq)
 
-        if not resp.event.wait(5):
-            print('no fastreadout response!')
-            continue
+        test_shift_register(
+            ro=ro,
+            shift_clk_div=cfg_clkdiv,
+            shift_sample_latency=8,
+            test_string=test_string,
+            num_rounds=1,
+        )
 
-        assert resp.data is not None
-        data = np.frombuffer(resp.data, dtype=np.uint32).byteswap().tobytes()
-        data_ba = bitarray.bitarray(buffer=data)
+        error_counts = []
 
-        if data_ba == cfg_test_string:
-            print('.', end='', flush=True)
-        else:
-            print('test:', cfg_test_string[:50])
-            print('resp:', data_ba[:50])
-        
-        time.sleep(cfg_round_delay)
-except KeyboardInterrupt:
-    pass
+        for latency in shift_latencies:
+            res = test_shift_register(
+                ro=ro,
+                shift_clk_div=cfg_clkdiv,
+                shift_sample_latency=latency,
+                test_string=test_string,
+                num_rounds=8,
+            )
+
+            errors = 0
+            while res:
+                part, res = res[:len(test_string)], res[len(test_string):]
+                diff = part ^ test_string
+                errors += diff.count(1)
+
+            print(f'{ro.frequency_mhz=:0.2f} {latency=:3d} {errors=}')
+
+            error_counts.append(errors)
+
+        line = f'{freq:0.3f}\t' + '\t'.join(str(ec) for ec in error_counts)
+        print(line, file=f_out, flush=True)
+        print(line)

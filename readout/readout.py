@@ -267,7 +267,7 @@ class Readout:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
     
-    def set_system_clock(self, frequency_mhz: float):
+    def set_system_clock(self, frequency_mhz: float, dry_run: bool = False) -> float:
         '''set system clock frequency to nearest possible value
         param frequency_mhz: bit rate when using lowest divider setting
         '''
@@ -275,16 +275,18 @@ class Readout:
         from util.xilinx import pll7series
         # find values for 4x bitrate (output divider is doubled in FPGA)
         div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 4 * frequency_mhz)
-        print(f'updating readout frequency {div_fb=} {2*div_out=} bitrate={freq_gen/4} Mbit/s')
+        if dry_run:
+            return freq_gen / 4
         regs = pll7series.get_register_values(div_fb, div_out, 'optimized')
         for i, val in enumerate(regs):
             self.write_register(self.ADDR_MMCM_CONFIG_0 + i, val)
         # update system frequency
         self.frequency_mhz = freq_gen / 4
         # wait for hardware and re-initialize
-        time.sleep(0.5)
-        self.fast_tx_flush()
+        time.sleep(0.1)
+        # self.fast_tx_flush()
         self.initialize()
+        return self.frequency_mhz
     
     ############################################################################
 
