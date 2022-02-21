@@ -87,9 +87,7 @@ if __name__ == '__main__':
     has_noise = np.sum(hits_noise) > 0
 
     sensor_size = hits_signal_first.shape[1:]
-    # pixel edges for pcolormesh
-    pixel_edges = pixel_edges = cast(tuple[np.ndarray, np.ndarray], tuple(
-        np.arange(size + 1) - 0.5 for size in sensor_size))
+
     # pixel indices
     pixel_pos = np.meshgrid(*(np.array(np.arange(size))
                             for size in sensor_size))

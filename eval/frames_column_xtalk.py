@@ -67,10 +67,11 @@ if args.hits_per_frame:
     plt.hist(
         hits_per_frame,
         bins=np.arange(180+1)-0.5,
+        density=True,
         log=True,
     )
     plt.xlabel(f'Hits per frame ({config.frame_length_us:0.1f} us)')
-    plt.ylabel('Number of Frames')
+    plt.ylabel('Fraction of Frames')
 
 if args.multi_hits_per_col:
     multi_hits = hits_per_col >= 30
@@ -117,6 +118,6 @@ if args.clean_hits:
 
 if not is_interactive:
     if args.save is not None:
-        plt.savefig(args.save, dpi=300, transparent=True)
+        plt.savefig(args.save, dpi=300, transparent=False)
     else:
         plt.show()
