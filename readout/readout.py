@@ -206,7 +206,7 @@ class Readout:
             # check version
             version = self.get_version()
             # supported versions
-            if version.readout not in [0x008, 0x009, 0x010, 0x013]:
+            if version.readout not in [0x008, 0x009, 0x010, 0x013, 0x014]:
                 raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
             # sm prog
             if version.readout >= 0x0010:
@@ -287,14 +287,14 @@ class Readout:
         assert frequency_mhz <= 150.0
         from util.xilinx import pll7series
         # find values for 4x bitrate (output divider is doubled in FPGA)
-        div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 4 * frequency_mhz)
+        div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 6 * frequency_mhz)
         if dry_run:
-            return freq_gen / 4
+            return freq_gen / 6
         regs = pll7series.get_register_values(div_fb, div_out, 'optimized')
         for i, val in enumerate(regs):
             self.write_register(self.ADDR_MMCM_CONFIG_0 + i, val)
         # update system frequency
-        self.frequency_mhz = freq_gen / 4
+        self.frequency_mhz = freq_gen / 6
         self.frequency_mhz_set = frequency_mhz
         # wait for hardware and re-initialize
         time.sleep(0.8)

@@ -31,7 +31,7 @@ from readout.instructions import Finish, GetTime, Reset, SetCfg, SetPins, ShiftO
 
 cfg_setup = 'hitpix2-1x1'
 cfg_voltage = 1.85
-cfg_clkdiv = 2
+cfg_clkdiv = 0
 
 ############################################################################
 # open readout
@@ -47,11 +47,11 @@ ro = HitPixReadout(serial_port_name, hitpix.setups[cfg_setup])
 ro.initialize()
 atexit.register(ro.close)
 
-vdd_channel = util.voltage_channel.open_voltage_channel(
-    board.default_vdd_driver,
-    'VDD',
-)
-vdd_channel.set_voltage(cfg_voltage)
+# vdd_channel = util.voltage_channel.open_voltage_channel(
+#     board.default_vdd_driver,
+#     'VDD',
+# )
+# vdd_channel.set_voltage(cfg_voltage)
 
 ############################################################################
 # readout program
@@ -120,7 +120,7 @@ def test_shift_register(
 # find all frequencies supported by readout
 frequencies = []
 f_last = 0
-for f in np.linspace(20, 150, 100):
+for f in np.linspace(35, 60, 20):
     f_new = ro.set_system_clock(f, dry_run=True)
     if f_new == f_last:
         continue
@@ -129,7 +129,7 @@ for f in np.linspace(20, 150, 100):
 
 ################################################################################
 
-shift_latencies = list(range(0, 19))
+shift_latencies = list(range(4, 30))
 test_string = bitarray.util.urandom(1024)
 
 with open(f'latency_scan_clkdiv{cfg_clkdiv}_{int(cfg_voltage*1e3)}.dat', 'w') as f_out:
