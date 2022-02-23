@@ -61,3 +61,8 @@ class HitPixReadout(Readout):
             print('readout version 10+ is recommended for HitPix2!')
         # set inverted pins
         self.write_register(self.ADDR_SM_INVERT_PINS, self.setup.invert_pins)
+        # set readout clock sequency
+        self.set_readout_clock_sequence(
+            self.setup.readout_div1_clk1,
+            self.setup.readout_div1_clk2,
+        )

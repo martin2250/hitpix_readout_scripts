@@ -46,7 +46,7 @@ class SetCfg(Instruction):
         assert (self.shift_word_len - 1) in range(1 << 5)
         shift_sample_latency = self.shift_sample_latency % 6
         shift_sample_latency |= (self.shift_sample_latency // 6) << 3
-        assert shift_sample_latency in range(1 << 5)
+        assert shift_sample_latency in range(1 << 6)
         instr_mask = 0b00010110 << 24
 
         instr_mask |= self.shift_rx_invert << 23

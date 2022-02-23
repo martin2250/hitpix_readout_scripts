@@ -33,6 +33,7 @@ class Readout:
     ADDR_MMCM_CONFIG_0     = 0x20
     ADDR_MMCM_CONFIG_1     = 0x21
     ADDR_MMCM_CONFIG_2     = 0x22
+    ADDR_RO_CLKS_DIV1      = 0x30
     ADDR_VERSION           = 0xf0
 
     class ReadoutError(Exception):
@@ -197,6 +198,11 @@ class Readout:
         self._expect_response()
         self.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
     
+    def set_readout_clock_sequence(self, clk1: int, clk2: int) -> None:
+        assert clk1 in range(1 << 12)
+        assert clk2 in range(1 << 12)
+        self.write_register(self.ADDR_RO_CLKS_DIV1, (clk2 << 16) | clk1)
+    
     def initialize(self) -> None:
         try:
             # set all enable pins high
@@ -232,15 +238,6 @@ class Readout:
             print(msg)
             print('-' * len(msg))
             raise err
-
-    # # slow version (two calls to send_packet)
-    # def write_function_card(self, slot_id: int, data: bytes) -> None:
-    #     assert slot_id in range(8)
-    #     # set CS low
-    #     mask = (~(1 << (7 - slot_id))) & 0xff # shift register outputs are swapped on gecco
-    #     self._write_function_card_raw(bytes([mask]))
-    #     # write data and set CS high
-    #     self._write_function_card_raw(data + b'\xff')
 
     def write_function_card(self, slot_id: int, data: bytes) -> None:
         assert slot_id in range(8)
@@ -284,7 +281,7 @@ class Readout:
         '''set system clock frequency to nearest possible value
         param frequency_mhz: bit rate when using lowest divider setting
         '''
-        assert frequency_mhz <= 150.0
+        assert frequency_mhz <= 190.0
         from util.xilinx import pll7series
         # find values for 4x bitrate (output divider is doubled in FPGA)
         div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 6 * frequency_mhz)

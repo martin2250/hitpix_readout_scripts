@@ -9,10 +9,14 @@ def optimize_vco_and_divider(
 ) -> tuple[float, int, float]:
     '''return feedback, output dividers and archived frequency'''
     div_fb_min = int(math.floor(vco_range[0] / freq_in))
+    if div_fb_min < 1:
+        div_fb_min = 1
     div_fb_max = int(math.ceil(vco_range[1] / freq_in))
     div_fb = np.arange(div_fb_min, div_fb_max + 0.1, 0.125)
 
     div_out_min = int(math.floor(vco_range[0] / freq_out))
+    if div_out_min < 1:
+        div_out_min = 1
     div_out_max = int(math.floor(vco_range[1] / freq_out))
     div_out = np.arange(div_out_min, div_out_max + 0.1)
 

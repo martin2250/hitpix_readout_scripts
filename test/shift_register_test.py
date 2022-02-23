@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from datetime import datetime
 import sys
 from pathlib import Path
 
@@ -29,9 +30,21 @@ from readout.instructions import Finish, GetTime, Reset, SetCfg, SetPins, ShiftO
 
 ############################################################################
 
+# cfg_setup = 'hitpix1'
 cfg_setup = 'hitpix2-1x1'
+
+# cfg_clkdiv = 0
+# cfg_clkdiv = 1
+cfg_clkdiv = 2
+
+cfg_select = 'ro'
+# cfg_select = 'dac'
+
 cfg_voltage = 1.85
-cfg_clkdiv = 0
+
+# checks
+assert cfg_clkdiv in range(3)
+assert cfg_select in ['ro', 'dac']
 
 ############################################################################
 # open readout
@@ -67,7 +80,7 @@ def test_shift_register(
         shift_rx_invert = True,
         shift_tx_invert = False,
         shift_toggle = False,
-        shift_select_dac = False,
+        shift_select_dac = cfg_select == 'dac',
         shift_word_len = 32,
         shift_clk_div = shift_clk_div,
         shift_sample_latency=shift_sample_latency,
@@ -120,7 +133,7 @@ def test_shift_register(
 # find all frequencies supported by readout
 frequencies = []
 f_last = 0
-for f in np.linspace(35, 60, 20):
+for f in np.linspace(10, 190, 30):
     f_new = ro.set_system_clock(f, dry_run=True)
     if f_new == f_last:
         continue
@@ -129,16 +142,26 @@ for f in np.linspace(35, 60, 20):
 
 ################################################################################
 
-shift_latencies = list(range(4, 30))
-test_string = bitarray.util.urandom(1024)
+shift_latencies = list(range(0, 47))
+test_string = bitarray.util.urandom(4*1024)
 
-with open(f'latency_scan_clkdiv{cfg_clkdiv}_{int(cfg_voltage*1e3)}.dat', 'w') as f_out:
+date = datetime.now().date().isoformat()
+ro_version = ro.get_version()
+filename = f'{date}-{cfg_setup}-{cfg_select}-v{ro_version.readout:03x}-div{cfg_clkdiv}-latency.dat'
+
+with open(filename, 'w') as f_out:
     print(f'# latency scan', file=f_out)
+    print(f'# {date=}', file=f_out)
     print(f'# {cfg_setup=}', file=f_out)
+    print(f'# {cfg_voltage=}', file=f_out)
+    print(f'# {cfg_clkdiv=}', file=f_out)
+    print(f'# {cfg_select=}', file=f_out)
+    print(f'# {ro_version=}', file=f_out)
     print(f'# latencies\t' + '\t'.join(str(int(l)) for l in shift_latencies), file=f_out)
     print(f'# frequency (MHz)\t' + '\t'.join(f'errors ({l:d})' for l in shift_latencies), file=f_out)
         
     for freq in frequencies:
+        print(freq)
         ro.set_system_clock(freq)
 
         test_shift_register(
@@ -169,7 +192,6 @@ with open(f'latency_scan_clkdiv{cfg_clkdiv}_{int(cfg_voltage*1e3)}.dat', 'w') as
             print(f'{ro.frequency_mhz=:0.2f} {latency=:3d} {errors=}')
 
             error_counts.append(errors)
-
         line = f'{freq:0.3f}\t' + '\t'.join(str(ec) for ec in error_counts)
         print(line, file=f_out, flush=True)
         print(line)

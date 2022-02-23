@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 from enum import IntEnum
+from multiprocessing.sharedctypes import Value
 from typing import Callable
+
 import bitarray
 import bitarray.util
-from dataclasses import dataclass
+import numpy as np
 
 
 class ReadoutPins(IntEnum):
@@ -23,7 +25,8 @@ class HitPixColumnConfig:
     inject_row: int = 0
     inject_col: int = 0
     ampout_col: int = 0
-    rowaddr: int = -1 # -1 == select first non-existent row
+    rowaddr: int = -1  # -1 == select first non-existent row
+
 
 class HitPixDacConfig:
     def __init__(self, **kwargs) -> None:
@@ -32,7 +35,7 @@ class HitPixDacConfig:
     @staticmethod
     def default() -> 'HitPixDacConfig':
         raise NotImplementedError()
-    
+
     def generate(self) -> bitarray.bitarray:
         raise NotImplementedError()
 
@@ -60,6 +63,8 @@ class HitPixSetup:
     version_number: int
 
     get_readout_latency: Callable[[int, float], int]
+    readout_div1_clk1: int
+    readout_div1_clk2: int
 
     vc_baseline: tuple[int, int]  # card slot, channel
     vc_threshold: tuple[int, int]  # card slot, channel
@@ -68,17 +73,19 @@ class HitPixSetup:
     @property
     def pixel_rows(self) -> int:
         return self.chip_rows * self.chip.rows
+
     @property
     def pixel_columns(self) -> int:
         return self.chip_columns * self.chip.columns
-    
+
     def encode_column_config(self, conf: HitPixColumnConfig) -> bitarray.bitarray:
         '''simply repeats column config x times'''
         assert self.chip_rows == 1
         return self.chip.encode_column_config(conf) * self.chip_columns
-    
+
 ################################################################################
 # helper methods
+
 
 def bitfield(*indices: int) -> int:
     i = 0
@@ -112,27 +119,25 @@ def encode_column_config_hitpix1(conf: HitPixColumnConfig) -> bitarray.bitarray:
     b.reverse()
     return b
 
-def get_readout_latency_hitpix1(clk_div: int, frequency: float) -> int:
-    if clk_div == 0:
-        if frequency < 45.0:
-            return 7
-        elif frequency < 60.0:
-            return 8
-        elif frequency < 85.0:
-            return 9
-        else:
-            return 10
-    elif clk_div == 1:
-        if frequency < 75.0:
-            return 7
-        elif frequency < 100.0:
-            return 8
-        else:
-            return 9
-    elif clk_div == 2:
-        return 5
 
-    raise ValueError('no data for this configuration')
+def get_readout_latency_hitpix1(clk_div: int, frequency_mhz: float, use_dac: bool = False) -> int:
+    if use_dac:
+        raise ValueError('no data for DAC')
+
+    polyvals_ro = {
+        0: [3.524e-06, -1.151e-03, 2.005e-01, 1.010e+01],
+        1: [1.393e-07, -2.918e-05, 8.649e-02, 1.095e+01],
+        2: [3.697e-06, -1.080e-03, 1.388e-01, 6.684e+00],
+    }
+
+    if not clk_div in polyvals_ro:
+        raise ValueError(f'no latency data available for {clk_div=}')
+    
+    polyvals = polyvals_ro[clk_div]
+    latency_float = np.poly1d(polyvals)(frequency_mhz)
+    
+    return round(latency_float)
+
 
 @dataclass
 class HitPix1DacConfig(HitPixDacConfig):
@@ -146,8 +151,8 @@ class HitPix1DacConfig(HitPixDacConfig):
     vpload: int
     vncomp: int
     vpfoll: int
-    q0:     int = 0x01 # chip doesn't work without these
-    qon:    int = 0x05 # just leave them constant
+    q0:     int = 0x01  # chip doesn't work without these
+    qon:    int = 0x05  # just leave them constant
 
     @staticmethod
     def default() -> 'HitPix1DacConfig':
@@ -184,6 +189,7 @@ class HitPix1DacConfig(HitPixDacConfig):
 
         return b
 
+
 hitpix1 = HitPixVersion(
     rows=24,
     columns=24,
@@ -204,6 +210,8 @@ hitpix1_single = HitPixSetup(
     vc_threshold=(0, 1),
     vc_injection=(2, 0),
     get_readout_latency=get_readout_latency_hitpix1,
+    readout_div1_clk1=0b001110000000,
+    readout_div1_clk2=0b000001110000,
 )
 
 ################################################################################
@@ -232,27 +240,33 @@ def encode_column_config_hitpix2(conf: HitPixColumnConfig) -> bitarray.bitarray:
     b.reverse()
     return b
 
-def get_readout_latency_hitpix2(clk_div: int, frequency: float) -> int:
-    if clk_div == 0:
-        if frequency < 32:
-            return 8
-        else:
-            return 9
-    elif clk_div == 1:
-        return 8
-    elif clk_div == 2:
-        return 8
+def get_readout_latency_hitpix2(clk_div: int, frequency_mhz: float, use_dac: bool = False) -> int:
+    if use_dac:
+        raise ValueError('no data for DAC')
 
-    raise ValueError('no data for this configuration')
+    polyvals_ro = {
+        0: [-6.656e-05, 6.263e-03, -8.489e-03, 1.427e+01],
+        1: [4.898e-06, -1.175e-03, 2.210e-01, 9.801e+00],
+        2: [-7.081e-06, 1.860e-03, -3.695e-02, 1.070e+01],
+    }
+
+    if not clk_div in polyvals_ro:
+        raise ValueError(f'no latency data available for {clk_div=}')
+    
+    polyvals = polyvals_ro[clk_div]
+    latency_float = np.poly1d(polyvals)(frequency_mhz)
+    
+    return round(latency_float)
+
 
 @dataclass
 class HitPix2DacConfig(HitPixDacConfig):
     # Q[0:1]
-    enable_output_cmos : bool
-    enable_output_diff : bool
+    enable_output_cmos: bool
+    enable_output_diff: bool
     # Qon[0:3]
-    enable_bandgap : bool
-    unlock:    int # must be 0x05
+    enable_bandgap: bool
+    unlock:    int  # must be 0x05
     # DAC[0:5]
     iblres:  int
     vn1:    int
@@ -330,6 +344,8 @@ hitpix2_single = HitPixSetup(
     vc_threshold=(1, 1),
     vc_injection=(2, 0),
     get_readout_latency=get_readout_latency_hitpix2,
+    readout_div1_clk1=0b001100000000,
+    readout_div1_clk2=0b000001100000,
 )
 
 hitpix2_row = HitPixSetup(
@@ -343,11 +359,13 @@ hitpix2_row = HitPixSetup(
     vc_threshold=(-1, -1),
     vc_injection=(-1, -1),
     get_readout_latency=get_readout_latency_hitpix2,
+    readout_div1_clk1=0b001100000000,
+    readout_div1_clk2=0b000001100000,
 )
 
 # keep in sync with defaults.py!!
 setups = {
-   'hitpix1': hitpix1_single,
-   'hitpix2-1x1': hitpix2_single,
-   'hitpix2-1x5': hitpix2_row,
+    'hitpix1': hitpix1_single,
+    'hitpix2-1x1': hitpix2_single,
+    'hitpix2-1x5': hitpix2_row,
 }
