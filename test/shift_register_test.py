@@ -33,9 +33,10 @@ from readout.instructions import Finish, GetTime, Reset, SetCfg, SetPins, ShiftO
 # cfg_setup = 'hitpix1'
 cfg_setup = 'hitpix2-1x1'
 
-# cfg_clkdiv = 0
+cfg_clkdiv = 0
 # cfg_clkdiv = 1
-cfg_clkdiv = 2
+# cfg_clkdiv = 2
+# cfg_clkdiv = 3
 
 cfg_select = 'ro'
 # cfg_select = 'dac'
@@ -43,7 +44,7 @@ cfg_select = 'ro'
 cfg_voltage = 1.85
 
 # checks
-assert cfg_clkdiv in range(3)
+assert cfg_clkdiv in range(4)
 assert cfg_select in ['ro', 'dac']
 
 ############################################################################
@@ -78,7 +79,7 @@ def test_shift_register(
 ) -> bitarray.bitarray:
     cfg = SetCfg(
         shift_rx_invert = True,
-        shift_tx_invert = False,
+        shift_tx_invert = cfg_select == 'dac',
         shift_toggle = False,
         shift_select_dac = cfg_select == 'dac',
         shift_word_len = 32,
@@ -87,7 +88,10 @@ def test_shift_register(
     )
     pins = SetPins(0)
 
-    setup_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
+    if cfg_select == 'ro':
+        setup_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
+    else:
+        setup_registers = len(ro.setup.chip.dac_config_class.default().generate())
 
     if len(test_string) >= setup_registers:
         prog = [
@@ -133,7 +137,7 @@ def test_shift_register(
 # find all frequencies supported by readout
 frequencies = []
 f_last = 0
-for f in np.linspace(10, 190, 30):
+for f in np.linspace(40, 60, 4):
     f_new = ro.set_system_clock(f, dry_run=True)
     if f_new == f_last:
         continue
