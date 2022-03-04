@@ -66,3 +66,4 @@ class HitPixReadout(Readout):
             self.setup.readout_div1_clk1,
             self.setup.readout_div1_clk2,
         )
+        self.fast_tx_flush()

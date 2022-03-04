@@ -22,6 +22,7 @@ class Readout:
     CMD_SM_WRITE       = 0x11
     CMD_SM_START       = 0x12
     CMD_SM_ABORT       = 0x13
+    CMD_SM_SOFT_ABORT  = 0x15
     CMD_FAST_TX_FLUSH  = 0x14
     CMD_HITPIX_DAC     = 0x20
     CMD_FUNCTION_CARD  = 0x30
@@ -65,6 +66,7 @@ class Readout:
         self._sm_prog_bits = 12
         self.frequency_mhz = float('nan')
         self.frequency_mhz_set = float('nan')
+        self.debug_responses = False
     
     def close(self) -> None:
         self.event_stop.set()
@@ -90,20 +92,28 @@ class Readout:
             for packet in packets:
                 try:
                     response = self._response_queue.get(False)
-                    # print(response.name, packet[:8].hex())
+                    if self.debug_responses:
+                        print(response.name, '>>>', packet[:8].hex())
                     response.data = packet
                     response.event.set()
                 except queue.Empty:
                     print('readout received unexpected response', packet)
     
     def _expect_response(self, name: Optional[str] = None) -> Response:
-        if not name:
+        if (not name) and self.debug_responses:
             lines = '\n'.join(traceback.format_stack())
             stack = []
             for s in lines.splitlines():
                 s = s.strip()
                 if not s or s.startswith('File'):
                     continue
+                # remove unittest call stack
+                if s == 'method()':
+                    stack = []
+                    continue
+                # remove common stuff
+                if '_expect_response()' in s:
+                    break
                 stack.append(s)
             name = '::'.join(stack)
         response = Response(name=name)
@@ -172,7 +182,7 @@ class Readout:
         """
         assert runs in range(0x10000)
         assert offset in range(0x10000)
-        assert (packets - 1) in range(0x10000)
+        assert packets in range(0x10000)
         self._expect_response()
         self.send_packet(struct.pack(
             '<BHHH',
@@ -185,6 +195,10 @@ class Readout:
     def sm_abort(self) -> None:
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_ABORT]))
+
+    def sm_soft_abort(self) -> None:
+        self._expect_response()
+        self.send_packet(bytes([self.CMD_SM_SOFT_ABORT]))
 
     def fast_tx_flush(self) -> None:
         self._expect_response()
@@ -284,7 +298,7 @@ class Readout:
             idle           = (value & (1 << 24)) != 0,
             active         = (value & (1 << 25)) != 0,
         )
-    
+
     def wait_sm_idle(self, timeout: float = 1.) -> None:
         t_timeout = time.monotonic() + timeout
         while self.get_sm_status().active:

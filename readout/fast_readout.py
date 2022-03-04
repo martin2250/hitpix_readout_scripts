@@ -1,6 +1,7 @@
 import queue
 import threading
 import time
+from typing import Optional
 
 from cobs import cobs
 import pylibftdi
@@ -28,8 +29,9 @@ class FastReadout:
             self.ftdi.read(16*4096)
         # start RX thread
         self.event_stop = threading.Event()
-        self.thread_read = threading.Thread(target=self.read, daemon=True, name='fastreadout')
+        self.thread_read = threading.Thread(target=self.__read, daemon=True, name='fastreadout')
         self.thread_read.start()
+        self.orphan_response_queue: Optional[queue.Queue[bytes]] = None
 
     def close(self) -> None:
         self.event_stop.set()
@@ -37,7 +39,7 @@ class FastReadout:
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
         self.ftdi.close()
 
-    def read(self) -> None:
+    def __read(self) -> None:
         buffer = bytearray()
         n_tot = 0
         t_start = time.perf_counter()
@@ -56,13 +58,19 @@ class FastReadout:
             del buffer[:index+1]
             first_packet = True
             for packet in packets:
+                data = cobs.decode(packet)
+                if not data:
+                    continue
                 try:
                     response = self._response_queue.get(False)
-                    response.data = cobs.decode(packet)
+                    response.data = data
                     response.event.set()
                 except queue.Empty:
+                    if self.orphan_response_queue is not None:
+                        self.orphan_response_queue.put(data)
+                        continue
                     if not first_packet:
-                        print('fastro: received unexpected response', packet)
+                        print('x', end='')
                 first_packet = False
         t_end = time.perf_counter()
         t_diff = t_end - t_start
