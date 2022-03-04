@@ -5,45 +5,56 @@ import sys
 from pathlib import Path
 
 
-
-
 if True:  # do not reorder with autopep8 or sortimports
     sys.path.insert(1, str(Path(__file__).parents[1]))
 
 import atexit
-import queue
-import threading
 import time
 import bitarray.util
 import bitarray
 import numpy as np
-import tqdm
 import util.configuration
 from readout.sm_prog import prog_shift_dense, prog_sleep
 import util.gridscan
 import util.voltage_channel
 from hitpix.readout import HitPixReadout
-import hitpix, hitpix.defaults
-from readout import fast_readout
+import hitpix
+import hitpix.defaults
 from readout.fast_readout import FastReadout
-from readout.instructions import Finish, GetTime, Reset, SetCfg, SetPins, ShiftOut, Sleep
+from readout.instructions import Finish, Reset, SetCfg, SetPins, ShiftOut, Sleep
 
 ############################################################################
 
-# cfg_setup = 'hitpix1'
-cfg_setup = 'hitpix2-1x1'
+cfg_setup = 'hitpix1'
+# cfg_setup = 'hitpix2-1x1'
 
-# cfg_clkdiv = 0
-# cfg_clkdiv = 1
-cfg_clkdiv = 2
+
+cfg_clkdiv_write = 0
+# cfg_clkdiv_write = 1
+# cfg_clkdiv_write = 2
+# cfg_clkdiv_write = 3
+
+cfg_clkdiv_read = None
+# cfg_clkdiv_read = 3
+
+cfg_shift_latencies = list(range(0, 47))
+
 
 cfg_select = 'ro'
 # cfg_select = 'dac'
 
-cfg_voltage = 1.85
+
+# cfg_voltage = 1.85
+cfg_voltage = None
+
+
+# cfg_num_rounds = 10
+cfg_num_rounds = 20
+
+cfg_freq_range = np.linspace(50, 180, 15)
 
 # checks
-assert cfg_clkdiv in range(3)
+assert cfg_clkdiv_write in range(4)
 assert cfg_select in ['ro', 'dac']
 
 ############################################################################
@@ -60,80 +71,127 @@ ro = HitPixReadout(serial_port_name, hitpix.setups[cfg_setup])
 ro.initialize()
 atexit.register(ro.close)
 
-# vdd_channel = util.voltage_channel.open_voltage_channel(
-#     board.default_vdd_driver,
-#     'VDD',
-# )
-# vdd_channel.set_voltage(cfg_voltage)
+if cfg_voltage is not None:
+    vdd_channel = util.voltage_channel.open_voltage_channel(
+        board.default_vdd_driver,
+        'VDD',
+    )
+    vdd_channel.set_voltage(cfg_voltage)
+
+############################################################################
+# precalculate stuff
+
+if cfg_select == 'ro':
+    # readout
+    setup_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
+else:
+    # dac, has slow outputs
+    setup_registers = len(ro.setup.chip.dac_config_class.default().generate())
+
+test_string = bitarray.util.urandom(setup_registers)
+
+if cfg_clkdiv_read is None:
+    if cfg_select == 'ro':
+        cfg_clkdiv_read = cfg_clkdiv_write
+    else:
+        cfg_clkdiv_read = 3
+
+# no need for different latencies with slow debug readout
+if cfg_clkdiv_read == 3:
+    cfg_shift_latencies = [0]
 
 ############################################################################
 # readout program
 
+
 def test_shift_register(
     ro: HitPixReadout,
-    shift_clk_div: int,
+    shift_clk_div_write: int,
+    shift_clk_div_read: int,
     shift_sample_latency: int,
-    test_string: bitarray.bitarray,
-    num_rounds: int,
-) -> bitarray.bitarray:
-    cfg = SetCfg(
-        shift_rx_invert = True,
-        shift_tx_invert = False,
-        shift_toggle = False,
-        shift_select_dac = cfg_select == 'dac',
-        shift_word_len = 32,
-        shift_clk_div = shift_clk_div,
+) -> list[bitarray.bitarray]:
+    read_words, read_remaining = setup_registers // 32, setup_registers % 32
+
+    # config instructions
+    pins = SetPins(0)
+    cfg_write = SetCfg(
+        shift_rx_invert=True,
+        shift_tx_invert=cfg_select == 'dac',
+        shift_toggle=False,
+        shift_select_dac=cfg_select == 'dac',
+        shift_word_len=32,
+        shift_clk_div=shift_clk_div_write,
         shift_sample_latency=shift_sample_latency,
     )
-    pins = SetPins(0)
+    cfg_read = cfg_write.modify(shift_clk_div=shift_clk_div_read)
+    cfg_clear = cfg_write.modify(shift_clk_div=3)  # clear shift register
 
-    setup_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
-
-    if len(test_string) >= setup_registers:
-        prog = [
-            cfg,
-            pins,
-            Reset(True, True),
-            Sleep(3),
-            *prog_shift_dense(test_string[:setup_registers], False),
-            *prog_shift_dense(test_string[setup_registers:], True),
-            ShiftOut(setup_registers, True),
-            *prog_sleep(int(10e3 * ro.frequency_mhz)),
+    # sm prog
+    prog = [
+        pins,
+        Reset(True, True),
+        # shift in a bunch of zeros
+        cfg_clear,
+        ShiftOut(setup_registers, False),
+        # shift in actual data
+        cfg_write,
+        Sleep(5),
+        *prog_shift_dense(test_string, False),
+        # start reading
+        cfg_read,
+        Reset(True, True),
+        ShiftOut(read_words*32, True),
+    ]
+    if read_remaining > 0:
+        prog += [
+            # wait for previous read to finish (takes 64 clock cycles with clkdiv 3)
+            Sleep(64),
+            cfg_read.modify(shift_word_len=read_remaining),
+            ShiftOut(read_remaining, True),
         ]
-    else:
-        prog = [
-            cfg,
-            pins,
-            Reset(True, True),
-            Sleep(3),
-            *prog_shift_dense(test_string, False),
-            ShiftOut(setup_registers - len(test_string), False),
-            ShiftOut(len(test_string), True),
-            *prog_sleep(int(10e3 * ro.frequency_mhz)),
-        ]
+    prog += [
+        Sleep(64),
+        *prog_sleep(int(100e-6 * ro.frequency_mhz)),
+        Finish(),
+    ]
 
-    ro.sm_write(prog + [Finish()])
+    ro.sm_write(prog)
 
     resp = fastreadout.expect_response()
-    
+
     ############################################################################
 
-    ro.sm_start(num_rounds)
+    ro.sm_start(cfg_num_rounds)
     ro.wait_sm_idle(5.0)
 
     if not resp.event.wait(5):
         raise TimeoutError('no fastreadout response!')
 
     assert resp.data is not None
-    data = np.frombuffer(resp.data, dtype=np.uint32).byteswap().tobytes()
-    return bitarray.bitarray(buffer=data).copy()
+    data = np.frombuffer(resp.data, dtype=np.uint32)
+
+    data = data.reshape((
+        cfg_num_rounds,
+        read_words + (read_remaining > 0),
+    ))
+
+    result = []
+    for subdata in data:
+        buffer = subdata.byteswap().tobytes()
+        ba = bitarray.bitarray(buffer=buffer)
+        ba_res = ba[:32*read_words]
+        if read_remaining > 0:
+            ba_res += ba[-read_remaining:]
+        result.append(ba_res.copy())
+    return result
 
 ################################################################################
+
 
 # find all frequencies supported by readout
 frequencies = []
 f_last = 0
-for f in np.linspace(10, 190, 30):
+for f in cfg_freq_range:
     f_new = ro.set_system_clock(f, dry_run=True)
     if f_new == f_last:
         continue
@@ -142,52 +200,52 @@ for f in np.linspace(10, 190, 30):
 
 ################################################################################
 
-shift_latencies = list(range(0, 47))
-test_string = bitarray.util.urandom(4*1024)
-
 date = datetime.now().date().isoformat()
 ro_version = ro.get_version()
-filename = f'{date}-{cfg_setup}-{cfg_select}-v{ro_version.readout:03x}-div{cfg_clkdiv}-latency.dat'
+filename = f'{date}-{cfg_setup}-{cfg_select}-v{ro_version.readout:03x}-div{cfg_clkdiv_write}-latency.dat'
 
 with open(filename, 'w') as f_out:
     print(f'# latency scan', file=f_out)
     print(f'# {date=}', file=f_out)
     print(f'# {cfg_setup=}', file=f_out)
     print(f'# {cfg_voltage=}', file=f_out)
-    print(f'# {cfg_clkdiv=}', file=f_out)
+    print(f'# {cfg_clkdiv_write=}', file=f_out)
+    print(f'# {cfg_clkdiv_read=}', file=f_out)
     print(f'# {cfg_select=}', file=f_out)
     print(f'# {ro_version=}', file=f_out)
-    print(f'# latencies\t' + '\t'.join(str(int(l)) for l in shift_latencies), file=f_out)
-    print(f'# frequency (MHz)\t' + '\t'.join(f'errors ({l:d})' for l in shift_latencies), file=f_out)
-        
+    print(f'# latencies\t' + '\t'.join(str(int(l))
+          for l in cfg_shift_latencies), file=f_out)
+    print(f'# frequency (MHz)\t' +
+          '\t'.join(f'errors ({l:d})' for l in cfg_shift_latencies), file=f_out)
+
     for freq in frequencies:
-        print(freq)
         ro.set_system_clock(freq)
 
         test_shift_register(
             ro=ro,
-            shift_clk_div=cfg_clkdiv,
+            shift_clk_div_write=cfg_clkdiv_write,
+            shift_clk_div_read=cfg_clkdiv_read,
             shift_sample_latency=8,
-            test_string=test_string,
-            num_rounds=1,
         )
 
         error_counts = []
 
-        for latency in shift_latencies:
+        for latency in cfg_shift_latencies:
             res = test_shift_register(
                 ro=ro,
-                shift_clk_div=cfg_clkdiv,
+                shift_clk_div_write=cfg_clkdiv_write,
+                shift_clk_div_read=cfg_clkdiv_read,
                 shift_sample_latency=latency,
-                test_string=test_string,
-                num_rounds=8,
             )
 
             errors = 0
-            while res:
-                part, res = res[:len(test_string)], res[len(test_string):]
-                diff = part ^ test_string
-                errors += diff.count(1)
+            for r in res:
+                diff = r ^ test_string
+                diff_sum = diff.count(1)
+                errors += diff_sum
+                # if diff_sum > 0:
+                #     print(r[:60])
+                #     print(test_string[:60])
 
             print(f'{ro.frequency_mhz=:0.2f} {latency=:3d} {errors=}')
 
