@@ -162,11 +162,25 @@ class Readout:
         self.send_packet(bytes([self.CMD_SM_WRITE]) + offset.to_bytes(2, 'little') + data)
         return offset + len(assembly_int)
 
-    def sm_start(self, runs: int = 1, offset: int = 0) -> None:
+    def sm_start(self, runs: int = 1, offset: int = 0, packets: int = 1) -> None:
+        """_summary_
+
+        Args:
+            runs (int, optional): _description_. Defaults to 1.
+            offset (int, optional): _description_. Defaults to 0.
+            packets (int, optional): 0 == infinite. Defaults to 1.
+        """
         assert runs in range(0x10000)
         assert offset in range(0x10000)
+        assert (packets - 1) in range(0x10000)
         self._expect_response()
-        self.send_packet(struct.pack('<BHH', self.CMD_SM_START, offset, runs))
+        self.send_packet(struct.pack(
+            '<BHHH',
+            self.CMD_SM_START,
+            offset,
+            runs,
+            (packets - 1) & 0xffff,
+        ))
 
     def sm_abort(self) -> None:
         self._expect_response()
@@ -212,7 +226,7 @@ class Readout:
             # check version
             version = self.get_version()
             # supported versions
-            if version.readout not in [0x008, 0x009, 0x010, 0x013, 0x014]:
+            if version.readout not in [0x015]:
                 raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
             # sm prog
             if version.readout >= 0x0010:
