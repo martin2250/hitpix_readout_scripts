@@ -24,7 +24,7 @@ from readout.instructions import Finish, GetTime, Sleep
 
 ############################################################################
 
-cfg_words_per_prog = 2000 # less than 8kbytes per prog
+cfg_words_per_prog = 8000 # less than 8kbytes per prog
 cfg_prog_per_round = 5000 # 40MB per run -> approx 1s
 cfg_rounds = 86400
 
@@ -49,7 +49,7 @@ atexit.register(ro.close)
 
 prog = [
     GetTime(),
-    Sleep(4),
+    # Sleep(4),
 ] * cfg_words_per_prog
 prog.append(Finish())
 
@@ -68,7 +68,10 @@ def receive():
     while running or not q_resp.empty():
         resp: fast_readout.Response = q_resp.get()
         q_resp.task_done()
-        resp.event.wait(5.0)
+        if not resp.event.wait(45.0):
+            print('no response received')
+            error = True
+            continue
         if resp.data is None:
             print('data is None!')
             error = True
@@ -86,7 +89,7 @@ try:
     for _ in tqdm.tqdm(range(cfg_rounds), dynamic_ncols=True):
         q_resp.put(fastreadout.expect_response())
         ro.sm_start(cfg_prog_per_round)
-        ro.wait_sm_idle(5.0)
+        ro.wait_sm_idle(45.0)
         if error:
             print('aborting due to error')
             break
