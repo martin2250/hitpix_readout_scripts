@@ -318,16 +318,19 @@ class Readout:
         regs = pll7series.get_register_values(div_fb, div_out, 'optimized')
         for i, val in enumerate(regs):
             self.write_register(self.ADDR_MMCM_CONFIG_0 + i, val)
-        # update system frequency
-        self.frequency_mhz = freq_gen / 6
-        self.frequency_mhz_set = frequency_mhz
-        # wait for hardware and re-initialize
+        # suppress responses
+        self._expect_response('dummy')
+        self._expect_response('dummy')
+        # wait for hardware
         time.sleep(0.8)
         try:
             while True: self._response_queue.get_nowait()
         except queue.Empty:
             pass
-        # self.fast_tx_flush()
+        # update system frequency
+        self.frequency_mhz = freq_gen / 6
+        self.frequency_mhz_set = frequency_mhz
+        # re-initialize
         self.initialize()
         return self.frequency_mhz
     
