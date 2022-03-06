@@ -104,12 +104,13 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     # raw frame duration
     duration_frame = 1e-6 * (config.frame_length_us + config.pause_length_us)
     # time for readout (estimated)
-    readout_pixels = setup.pixel_columns * setup.pixel_rows
-    duration_frame += 1e-6 * readout_pixels / ro.frequency_mhz
+    readout_bits = setup.pixel_columns * setup.pixel_rows * setup.chip.bits_adder
+    duration_frame += 1e-6 * readout_bits / ro.frequency_mhz
     # X ms per packet for good progress
     frames_per_run = math.ceil(500e-3 / duration_frame)
-    if frames_per_run > ((1 << 16) - 1):
-        frames_per_run = ((1 << 16) - 1)
+    # limit amount of data in a packet for less jitter
+    if frames_per_run > 1024:
+        frames_per_run = 1024
     num_runs = math.ceil(config.num_frames / frames_per_run)
     # store real values in config
     config.frames_per_run = frames_per_run
