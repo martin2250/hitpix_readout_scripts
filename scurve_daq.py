@@ -93,6 +93,7 @@ def main(
             readout_frequency=scan_dict['frequency'],
             setup_name=setup_name,
             rows=rows,
+            pulse_ns=scan_dict['pulse_ns'],
             simultaneous_injections=simultaneous_injections,
         )
 

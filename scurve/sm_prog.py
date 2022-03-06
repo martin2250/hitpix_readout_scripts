@@ -50,7 +50,6 @@ def prog_injections_variable(
     prog.extend([
         cfg_int,
         pins,
-        Sleep(pulse_cycles),
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(cfg_col_prep), False),
         Sleep(pulse_cycles),

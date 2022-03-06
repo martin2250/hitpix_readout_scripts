@@ -47,9 +47,11 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
     ############################################################################
     # prepare statemachine
 
+    pulse_cycles = int(max(1, config.pulse_ns * ro.frequency_mhz / 1000))
+
     prog_injection = prog_injections_variable(
         num_injections=config.injections_per_round,
-        pulse_cycles=50,
+        pulse_cycles=pulse_cycles,
         setup=ro.setup,
         rows=[int(row) for row in config.rows], # np.uint64 to python int
         simultaneous_injections=config.simultaneous_injections,

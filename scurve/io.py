@@ -21,6 +21,7 @@ class SCurveConfig:
     voltage_vssa: float
     injection_pulse_us: float
     injection_pause_us: float
+    pulse_ns: float
     setup_name: str
 
     rows: np.ndarray # [Any,np.dtype[np.uint]] works only in np 1.22
@@ -58,6 +59,8 @@ class SCurveConfig:
             del d['shift_clk_div']
         if not 'readout_frequency' in d:
             d['readout_frequency'] = 25.0
+        if not 'pulse_ns' in d:
+            d['pulse_ns'] = -1.0
         return SCurveConfig(
             dac_cfg=dac_cfg,
             injection_voltage=injection_voltage,
