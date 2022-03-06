@@ -31,11 +31,13 @@ dac_default_hitpix2 = {
 
 # blres ~ vnfb --> entladung / fallende Flanke
 # vpload -> ansteigende Flanke
-voltages_default = {
+settings_default = {
     'threshold': 1.2,
     'baseline': 1.1,
     'vssa': 1.25, # 1.85 für HP2 -> ampout messung wiederholen
     'vdd': 1.85,
+    'frequency': 75.0,
+    'pulse_ns': 25.0,
 }
 
 setups = [

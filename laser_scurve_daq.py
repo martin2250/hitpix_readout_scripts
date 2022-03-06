@@ -13,7 +13,7 @@ def __get_config_dict_ext() -> dict:
         'pulse_us': 2.5,
         'pause_us': 7.5,
     }
-    voltages = copy.copy(hitpix.defaults.voltages_default)
+    voltages = copy.copy(hitpix.defaults.settings_default)
     del voltages['threshold']
     config.update(voltages)
     return config

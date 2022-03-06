@@ -6,7 +6,6 @@ def __get_config_dict_ext() -> dict:
         'pulse_us': 2.5,
         'pause_us': 17.5,
         'simultaneous_injections': -2,
-        'frequency': 75.0,
     }
 
 def main(
@@ -65,7 +64,7 @@ def main(
     config_dict_template = {
         'dac': setup.chip.dac_config_class.default(),
     }
-    config_dict_template.update(**hitpix.defaults.voltages_default)
+    config_dict_template.update(**hitpix.defaults.settings_default)
     config_dict_template.update(**__get_config_dict_ext())
 
     ############################################################################
@@ -264,7 +263,7 @@ if __name__ == '__main__':
 
         def set_completer(prefix, parsed_args, **kwargs):
             choices_set = []
-            for name, value in hitpix.defaults.voltages_default.items():
+            for name, value in hitpix.defaults.settings_default.items():
                 choices_set.append(f'{name}={value}')
             for name, value in __get_config_dict_ext().items():
                 choices_set.append(f'{name}={value}')
