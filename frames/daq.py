@@ -1,3 +1,5 @@
+import math
+from optparse import Option
 import queue
 import time
 from typing import Optional
@@ -23,6 +25,7 @@ def _decode_responses(
     setup: HitPixSetup,
     reset_counters: bool,
     callback = None,
+    progress: Optional[tqdm.tqdm] = None,
     ):
     ctr_max = 1 << setup.chip.bits_counter
     hits_last = None
@@ -51,6 +54,9 @@ def _decode_responses(
             callback(block_frames)
         frames.append(block_frames)
         timestamps.append(block_timestamps)
+
+        if progress is not None:
+            progress.update()
 
 
 def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None, callback = None) -> tuple[np.ndarray, np.ndarray]:
@@ -95,12 +101,23 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     ############################################################################
     # start measurement
 
-    # total number of injection cycles, round up
-    num_runs = int(config.num_frames / config.frames_per_run + 0.99)
-    responses = [fastreadout.expect_response() for _ in range(num_runs)]
+    # raw frame duration
+    duration_frame = 1e-6 * (config.frame_length_us + config.pause_length_us)
+    # time for readout (estimated)
+    readout_pixels = setup.pixel_columns * setup.pixel_rows
+    duration_frame += 1e-6 * readout_pixels / ro.frequency_mhz
+    # X ms per packet for good progress
+    frames_per_run = math.ceil(500e-3 / duration_frame)
+    if frames_per_run > ((1 << 16) - 1):
+        frames_per_run = ((1 << 16) - 1)
+    num_runs = math.ceil(config.num_frames / frames_per_run)
+    # store real values in config
+    config.frames_per_run = frames_per_run
+    config.num_frames = frames_per_run * num_runs
 
-    duration_run = 1e-6 * config.frames_per_run * (config.frame_length_us + config.pause_length_us)
-    timeout = 15.0 + 10* duration_run
+
+    duration_total = num_runs * frames_per_run * duration_frame
+    timeout = 15.0 + 3 * duration_total * num_runs
 
     if progress is not None:
         progress.total = num_runs
@@ -108,6 +125,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     ############################################################################
     # process data
 
+    responses = [fastreadout.expect_response() for _ in range(num_runs)]
     frames = []
     timestamps = []
     
@@ -122,19 +140,16 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
             setup,
             config.reset_counters,
             callback,
+            progress,
         ),
     )
     t_decode.start()
 
     ############################################################################
-    # test all voltages
 
-    for _ in range(num_runs):
-        # start measurement
-        ro.sm_start(config.frames_per_run)
-        ro.wait_sm_idle(timeout)
-        if progress is not None:
-            progress.update()
+    # start measurement
+    ro.sm_start(frames_per_run, packets=num_runs)
+    ro.wait_sm_idle(timeout)
 
     t_decode.join(timeout)
 
