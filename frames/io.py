@@ -25,6 +25,7 @@ class FrameConfig:
     read_adders: bool
     setup_name: str
     readout_frequency: float
+    pulse_ns: float
     frames_per_run: int = 250
 
     def asdict(self) -> dict:
@@ -49,6 +50,8 @@ class FrameConfig:
             del d['shift_clk_div']
         if not 'readout_frequency' in d:
             d['readout_frequency'] = 25.0
+        if not 'pulse_ns' in d:
+            d['pulse_ns'] = -1.0
         return FrameConfig(
             dac_cfg=dac_cfg,
             **d,

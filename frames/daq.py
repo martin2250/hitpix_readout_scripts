@@ -1,3 +1,4 @@
+import queue
 import time
 from typing import Optional
 
@@ -76,9 +77,11 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     ############################################################################
     # prepare statemachine
 
+    pulse_cycles = int(max(1, config.pulse_ns * ro.frequency_mhz / 1000))
+
     prog_init, prog_readout = prog_read_frames(
         frame_cycles=int(ro.frequency_mhz * config.frame_length_us),
-        pulse_cycles=50,
+        pulse_cycles=pulse_cycles,
         pause_cycles=int(ro.frequency_mhz * config.pause_length_us),
         reset_counters=config.reset_counters,
         setup=setup,
@@ -97,7 +100,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     responses = [fastreadout.expect_response() for _ in range(num_runs)]
 
     duration_run = 1e-6 * config.frames_per_run * (config.frame_length_us + config.pause_length_us)
-    timeout = 5.0 + duration_run
+    timeout = 15.0 + 10* duration_run
 
     if progress is not None:
         progress.total = num_runs

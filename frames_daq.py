@@ -73,6 +73,7 @@ def main(
             readout_frequency=config_dict['frequency'],
             read_adders=read_adders,
             reset_counters=bool(config_dict['reset_counters']),
+            pulse_ns=config_dict['pulse_ns'],
             setup_name=setup_name,
         )
 

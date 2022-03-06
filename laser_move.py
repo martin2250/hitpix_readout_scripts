@@ -178,6 +178,7 @@ if __name__ == '__main__':
             reset_counters=bool(config_dict['reset_counters']),
             frames_per_run=frames_per_run,
             setup_name=setup_name,
+            pulse_ns=config_dict['pulse_ns'],
             readout_frequency=config_dict['frequency'],
         )
 
