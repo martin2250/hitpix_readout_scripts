@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Literal, Optional, cast, Any
+from typing import Any, Literal, Optional, cast
 
 from frames.io import save_frame_attrs
 
@@ -29,7 +29,9 @@ def main(
 ):
     import atexit
     import copy
+    import signal
     import sys
+    import threading
     import time
     from pathlib import Path
 
@@ -44,7 +46,7 @@ def main(
     import util.helpers
     import util.voltage_channel
     from frames.daq import read_frames
-    from frames.io import FrameConfig, save_frames
+    from frames.io import FrameConfig
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
 
@@ -123,7 +125,19 @@ def main(
 
     ############################################################################
 
+    evt_stop = threading.Event()
+
+    def handle_int(*_):
+        print('interrupted by SIGINT, stopping')
+        evt_stop.set()
+
+    signal.signal(signal.SIGINT, handle_int)
+
+    ############################################################################
+
     if scan_parameters:
+        # do not allow infinite runtime in parameter scans (for now)
+        assert num_frames > 0
         with h5py.File(path_output, 'a') as file:
             # save scan parameters first
             group_scan = file.require_group('scan')
@@ -155,7 +169,15 @@ def main(
                 prog_meas.reset()
                 ro.sm_abort()
                 assert not sums_only
-                read_frames(ro, fastreadout, config, prog_meas, h5group=group)
+                read_frames(
+                    ro=ro,
+                    fastreadout=fastreadout,
+                    config=config,
+                    progress=prog_meas,
+                    callback=None,
+                    evt_stop=evt_stop,
+                    h5group=group
+                )
                 prog_scan.update()
                 # # sums -> sum up all frames
                 # if sums_only:
@@ -236,11 +258,12 @@ def main(
             save_frame_attrs(group, config)
             assert not sums_only
             read_frames(
-                ro,
-                fastreadout,
-                config,
-                tqdm.tqdm(dynamic_ncols=True),
-                callback,
+                ro=ro,
+                fastreadout=fastreadout,
+                config=config,
+                progress=tqdm.tqdm(dynamic_ncols=True),
+                callback=callback,
+                evt_stop=evt_stop,
                 h5group=group,
             )
 
@@ -266,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--frames',
         type=int, default=5000,
-        help='total number of frames to read',
+        help='total number of frames to read (-1 == infinite runtime)',
     )
 
     a_scan = parser.add_argument(

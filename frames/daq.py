@@ -25,6 +25,7 @@ def _decode_responses(
     timeout: float,
     setup: HitPixSetup,
     reset_counters: bool,
+    evt_stop: threading.Event,
     num_runs: Optional[int] = None,
     callback=None,
     progress: Optional[tqdm.tqdm] = None,
@@ -35,9 +36,21 @@ def _decode_responses(
     # total number of frames received so far
     frames_total = 0
 
-    assert num_runs is not None
-    for _ in range(num_runs):
-        data = response_queue.get(True, timeout)
+    if num_runs is None:
+        # infinite iterator
+        run_iter = iter(int, 1)
+    else:
+        run_iter = range(num_runs)
+
+    # data processing loop
+    for _ in run_iter:
+        try:
+            data = response_queue.get(True, timeout)
+        except Exception as e:
+            if evt_stop.is_set():
+                break
+            else:
+                raise e
 
         # decode hits
         block_timestamps, block_frames = decode_column_packets(
@@ -95,8 +108,12 @@ def read_frames(
     config: FrameConfig,
     progress: Optional[tqdm.tqdm] = None,
     callback=None,
+    evt_stop: Optional[threading.Event] = None,
     h5group: Optional[h5py.Group] = None,
 ) -> Optional[tuple[np.ndarray, np.ndarray, TimeSync]]:
+    # dummy event
+    evt_stop = evt_stop or threading.Event()
+
     ############################################################################
     # set up readout
 
@@ -150,9 +167,8 @@ def read_frames(
     if frames_per_run > 1024:
         frames_per_run = 1024
     num_runs = math.ceil(config.num_frames / frames_per_run)
-    # store real values in config
+    # store real value in config
     config.frames_per_run = frames_per_run
-    config.num_frames = frames_per_run * num_runs
 
     duration_run = frames_per_run * duration_frame
     duration_total = num_runs * duration_run
@@ -161,14 +177,17 @@ def read_frames(
     timeout_total = 5.0 + 1.5 * duration_total
 
     if progress is not None:
-        progress.total = config.num_frames
+        if config.num_frames > 0:
+            progress.total = frames_per_run * num_runs
+        else:
+            progress.total = None
 
     ############################################################################
     # set up h5 storage
 
     time_sync = ro.get_synchronization()
 
-    h5data = None
+    h5data = dset_frames = None
     if h5group is not None:
         dset_frames = h5group.create_dataset(
             'frames',
@@ -212,7 +231,8 @@ def read_frames(
             'timeout': timeout_run,
             'setup': setup,
             'reset_counters': config.reset_counters,
-            'num_runs': num_runs,
+            'evt_stop': evt_stop,
+            'num_runs': num_runs if config.num_frames > 0 else None,
             'callback': callback,
             'progress': progress,
             'h5data': h5data,
@@ -223,18 +243,51 @@ def read_frames(
     ############################################################################
 
     # start measurement
-    ro.sm_start(frames_per_run, packets=num_runs)
-    ro.wait_sm_idle(timeout_total)
+    ro.sm_start(
+        frames_per_run,
+        packets=num_runs if config.num_frames > 0 else 0,
+    )
 
-    t_decode.join(2*timeout_run)
+    if config.num_frames > 0:
+        t_timeout = time.monotonic() + timeout_total
+    else:
+        t_timeout = float('+inf')
+    # wait until idle
+    while ro.get_sm_status().active:
+        # stop event (SIGINT)
+        if evt_stop.is_set():
+            print('sending soft abort signal')
+            ro.sm_soft_abort()
+            try:
+                ro.wait_sm_idle(2*timeout_run)
+            except TimeoutError:
+                ro.sm_abort()
+                raise TimeoutError('soft abort timed out')
+            break
+        # timeout
+        if time.monotonic() > t_timeout:
+            ro.sm_abort()
+            raise TimeoutError('statemachine not idle')
+        # no need to react quickly here
+        time.sleep(0.05)
+
+    t_decode.join(5*timeout_run)
 
     ############################################################################
 
     # do not return any data when it was written to h5 file directly
     if h5group is not None:
+        assert dset_frames is not None
+        if config.num_frames < 0:
+            print('total frames: ', dset_frames.shape[0])
+        config.num_frames = dset_frames.shape[0]
         return
 
     frames = np.concatenate(frames)
     timestamps = np.concatenate(timestamps)
+
+    if config.num_frames < 0:
+        print('total frames: ', len(timestamps))
+    config.num_frames = len(timestamps)
 
     return frames, timestamps, time_sync
