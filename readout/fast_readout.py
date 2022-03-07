@@ -1,13 +1,20 @@
+from audioop import mul
 import queue
 import threading
+import multiprocessing, multiprocessing.connection as mpc
 import time
-from typing import Optional
+from typing import Optional, cast
 
 from cobs import cobs
+import signal
 import pylibftdi
 
 from . import Response
 
+try:
+    from rich import print
+except ImportError:
+    pass
 
 class FastReadout:
     def __init__(self, serial_number: str) -> None:
@@ -28,7 +35,7 @@ class FastReadout:
             self.ftdi.ftdi_fn.ftdi_usb_purge_rx_buffer()
             self.ftdi.read(16*4096)
         # start RX thread
-        self.event_stop = threading.Event()
+        self.event_stop = multiprocessing.Event()
         self.thread_read = threading.Thread(target=self.__read, daemon=True, name='fastreadout')
         self.thread_read.start()
         self.orphan_response_queue: Optional[queue.Queue[bytes]] = None
@@ -36,17 +43,19 @@ class FastReadout:
     def close(self) -> None:
         self.event_stop.set()
         self.thread_read.join()
-        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
-        self.ftdi.close()
-
-    def __read(self) -> None:
+    
+    def __read_proc(
+        self,
+        send: mpc.Connection,
+    ):
+        signal.signal(signal.SIGINT, lambda a, b: None)
         buffer = bytearray()
         n_tot = 0
         t_start = time.perf_counter()
         while not self.event_stop.is_set():
-            data_new = self.ftdi.read(3968 * 256) # see AN232B-03 Optimising D2XX Data Throughput
+            data_new = self.ftdi.read(3968 * 512) # see AN232B-03 Optimising D2XX Data Throughput
             if not isinstance(data_new, bytes) or not data_new:
-                time.sleep(0.001)
+                time.sleep(0.0002)
                 continue
             n_tot += len(data_new)
             buffer.extend(data_new)
@@ -54,9 +63,32 @@ class FastReadout:
             if not b'\x00' in data_new:
                 continue
             index = buffer.rindex(b'\x00')
-            packets = buffer[:index].split(b'\x00')
+            send.send(bytes(buffer[:index]))
             del buffer[:index+1]
-            first_packet = True
+        t_end = time.perf_counter()
+        t_diff = t_end - t_start
+        mb_tot = n_tot / 1024**2
+        print(f'fastreadout {mb_tot:0.1f} MB, {t_diff:0.1f} s, {mb_tot/t_diff:0.2f} MB/s')
+        self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
+        self.ftdi.close()
+        send.send(None)
+        exit()
+
+
+    def __read(self) -> None:
+        recv, send = multiprocessing.Pipe(duplex=False)
+        proc = multiprocessing.Process(
+            target=self.__read_proc,
+            name='fastreadout_proc',
+            daemon=True,
+            args=(send,),
+        )
+        proc.start()
+        while not self.event_stop.is_set():
+            buffer = recv.recv()
+            if not isinstance(buffer, bytes):
+                break
+            packets = buffer.split(b'\x00')
             for packet in packets:
                 data = cobs.decode(packet)
                 if not data:
@@ -69,13 +101,8 @@ class FastReadout:
                     if self.orphan_response_queue is not None:
                         self.orphan_response_queue.put(data)
                         continue
-                    if not first_packet:
-                        print('x', end='')
-                first_packet = False
-        t_end = time.perf_counter()
-        t_diff = t_end - t_start
-        mb_tot = n_tot / 1024**2
-        print(f'fastreadout {mb_tot:0.1f}MB, {t_diff:0.1f}s, {mb_tot/t_diff:0.2f} MB/s')
+                    print('x', end='')
+        proc.join()
 
     def expect_response(self) -> Response:
         response = Response()

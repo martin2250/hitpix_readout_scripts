@@ -278,6 +278,8 @@ def main(
                     evt_stop=evt_stop,
                     h5group=group,
                 )
+    size_mb = path_output.stat().st_size / (1 << 20)
+    print(f'total file size: {size_mb:0.2f} MB')
 
 
 if __name__ == '__main__':
