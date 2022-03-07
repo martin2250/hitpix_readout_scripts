@@ -53,10 +53,11 @@ def _decode_responses(
         if callback:
             callback(block_frames)
         frames.append(block_frames)
-        timestamps.append(block_timestamps)
+        # only store timestamp of first row of each frame
+        timestamps.append(block_timestamps[::setup.pixel_rows])
 
         if progress is not None:
-            progress.update()
+            progress.update(block_frames.shape[0])
 
 
 def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None, callback = None) -> tuple[np.ndarray, np.ndarray]:
@@ -116,12 +117,14 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     config.frames_per_run = frames_per_run
     config.num_frames = frames_per_run * num_runs
 
-
-    duration_total = num_runs * frames_per_run * duration_frame
-    timeout = 15.0 + 3 * duration_total * num_runs
+    duration_run = frames_per_run * duration_frame
+    duration_total = num_runs * duration_run
+    
+    timeout_run = 1.0 + 1.5 * duration_run
+    timeout_total = 5.0 + 1.5 * duration_total
 
     if progress is not None:
-        progress.total = num_runs
+        progress.total = config.num_frames
 
     ############################################################################
     # process data
@@ -137,7 +140,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
             responses,
             frames,
             timestamps,
-            timeout,
+            timeout_run,
             setup,
             config.reset_counters,
             callback,
@@ -150,18 +153,15 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
 
     # start measurement
     ro.sm_start(frames_per_run, packets=num_runs)
-    ro.wait_sm_idle(timeout)
+    ro.wait_sm_idle(timeout_total)
 
-    t_decode.join(timeout)
+    t_decode.join(2*timeout_run)
 
     ############################################################################
 
     frames = np.concatenate(frames)
 
     timestamps = np.hstack(timestamps)
-    # only store timestamp of first row of each frame
-    timestamps = timestamps[::setup.pixel_rows]
-
     times = ro.convert_time(timestamps)
 
     return frames, times
