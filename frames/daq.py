@@ -1,52 +1,57 @@
 import math
-from optparse import Option
 import queue
+import threading
 import time
 from typing import Optional
 
+import h5py
 import numpy as np
 import tqdm
 from hitpix import HitPixSetup
-from readout import Response
+from hitpix.readout import HitPixReadout
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish
-
-from hitpix.readout import HitPixReadout
 from readout.sm_prog import decode_column_packets, prog_dac_config
+from util.time_sync import TimeSync
+
 from .io import FrameConfig
 from .sm_prog import prog_read_frames
-import threading
 
 
 def _decode_responses(
-    responses: list[Response],
+    response_queue: queue.Queue[bytes],
     frames: list[np.ndarray],
     timestamps: list[np.ndarray],
     timeout: float,
     setup: HitPixSetup,
     reset_counters: bool,
+    num_runs: Optional[int] = None,
     callback=None,
     progress: Optional[tqdm.tqdm] = None,
+    h5data: Optional[tuple[h5py.Dataset, h5py.Dataset]] = None,
 ):
     ctr_max = 1 << setup.chip.bits_counter
     hits_last = None
+    # total number of frames received so far
+    frames_total = 0
 
-    for response in responses:
-        response.event.wait(timeout)
-        assert response.data is not None
+    assert num_runs is not None
+    for _ in range(num_runs):
+        data = response_queue.get(True, timeout)
 
         # decode hits
         block_timestamps, block_frames = decode_column_packets(
-            response.data,
+            data,
             setup.pixel_columns,
             setup.chip.bits_adder,
-            setup.chip.bits_counter
+            setup.chip.bits_counter,
         )
         block_frames = block_frames.reshape(
             -1,
             setup.pixel_rows,
-            setup.pixel_columns
+            setup.pixel_columns,
         )
+        block_numframes = block_frames.shape[0]
 
         if not reset_counters:
             if hits_last is None:
@@ -63,21 +68,35 @@ def _decode_responses(
 
         if callback:
             callback(block_frames)
-        frames.append(block_frames)
-        # only store timestamp of first row of each frame
-        timestamps.append(block_timestamps[::setup.pixel_rows])
 
+        if h5data is not None:
+            dset_frames, dset_times = h5data
+            size_new = frames_total+block_numframes
+            slice_new = slice(frames_total, None)
+            # store frames
+            dset_frames.resize(size_new, 0)
+            dset_frames[slice_new] = block_frames
+            # store timestamps
+            dset_times.resize(size_new, 0)
+            dset_times[slice_new] = block_timestamps[::setup.pixel_rows]
+        else:
+            frames.append(block_frames)
+            # only store timestamp of first row of each frame
+            timestamps.append(block_timestamps[::setup.pixel_rows])
+
+        frames_total += block_numframes
         if progress is not None:
-            progress.update(block_frames.shape[0])
+            progress.update(block_numframes)
 
 
 def read_frames(
-        ro: HitPixReadout,
-        fastreadout: FastReadout,
-        config: FrameConfig,
-        progress: Optional[tqdm.tqdm] = None,
-        callback=None
-) -> tuple[np.ndarray, np.ndarray]:
+    ro: HitPixReadout,
+    fastreadout: FastReadout,
+    config: FrameConfig,
+    progress: Optional[tqdm.tqdm] = None,
+    callback=None,
+    h5group: Optional[h5py.Group] = None,
+) -> Optional[tuple[np.ndarray, np.ndarray, TimeSync]]:
     ############################################################################
     # set up readout
 
@@ -145,25 +164,59 @@ def read_frames(
         progress.total = config.num_frames
 
     ############################################################################
+    # set up h5 storage
+
+    time_sync = ro.get_synchronization()
+
+    h5data = None
+    if h5group is not None:
+        dset_frames = h5group.create_dataset(
+            'frames',
+            dtype=np.uint32,
+            shape=(frames_per_run, setup.pixel_rows, setup.pixel_rows),
+            maxshape=(None, setup.pixel_rows, setup.pixel_rows),
+            chunks=(frames_per_run, setup.pixel_rows, setup.pixel_rows),
+            compression='gzip',
+        )
+        dset_times = h5group.create_dataset(
+            'times',
+            dtype=np.uint32,
+            # will get expanded later, zero size is not allowed
+            shape=(frames_per_run,),
+            maxshape=(None,),
+            chunks=(frames_per_run,),
+            compression='gzip',
+        )
+        h5data = (
+            dset_frames,
+            dset_times,
+        )
+        import json
+        dset_times.attrs['sync'] = json.dumps(time_sync.asdict())
+
+    ############################################################################
     # process data
 
-    responses = [fastreadout.expect_response() for _ in range(num_runs)]
+    response_queue = queue.Queue()
+    fastreadout.orphan_response_queue = response_queue
     frames = []
     timestamps = []
 
     t_decode = threading.Thread(
         target=_decode_responses,
         daemon=True,
-        args=(
-            responses,
-            frames,
-            timestamps,
-            timeout_run,
-            setup,
-            config.reset_counters,
-            callback,
-            progress,
-        ),
+        kwargs={
+            'response_queue': response_queue,
+            'frames': frames,
+            'timestamps': timestamps,
+            'timeout': timeout_run,
+            'setup': setup,
+            'reset_counters': config.reset_counters,
+            'num_runs': num_runs,
+            'callback': callback,
+            'progress': progress,
+            'h5data': h5data,
+        },
     )
     t_decode.start()
 
@@ -177,9 +230,11 @@ def read_frames(
 
     ############################################################################
 
+    # do not return any data when it was written to h5 file directly
+    if h5group is not None:
+        return
+
     frames = np.concatenate(frames)
+    timestamps = np.concatenate(timestamps)
 
-    timestamps = np.hstack(timestamps)
-    times = ro.convert_time(timestamps)
-
-    return frames, times
+    return frames, timestamps, time_sync

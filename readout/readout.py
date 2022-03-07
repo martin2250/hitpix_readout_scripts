@@ -1,54 +1,57 @@
 import math
-import traceback
-from typing import Any, Iterable, Union, Optional
-import serial
-from . import instructions
-import time
-from cobs import cobs
-import threading
 import queue
-from dataclasses import dataclass
 import struct
+import threading
+import time
+import traceback
+from dataclasses import dataclass
+from typing import Iterable, Optional, Union
 
-from . import Response
+import serial
+from cobs import cobs
+from util.time_sync import TimeSync
+
+from . import Response, instructions
 
 InstructionsLike = Union[list[int], list[instructions.Instruction]]
 
+
 class Readout:
     # commands
-    CMD_REGISTER_READ  = 0x01
+    CMD_REGISTER_READ = 0x01
     CMD_REGISTER_WRITE = 0x02
-    CMD_SM_EXEC        = 0x10
-    CMD_SM_WRITE       = 0x11
-    CMD_SM_START       = 0x12
-    CMD_SM_ABORT       = 0x13
-    CMD_SM_SOFT_ABORT  = 0x15
-    CMD_FAST_TX_FLUSH  = 0x14
-    CMD_HITPIX_DAC     = 0x20
-    CMD_FUNCTION_CARD  = 0x30
+    CMD_SM_EXEC = 0x10
+    CMD_SM_WRITE = 0x11
+    CMD_SM_START = 0x12
+    CMD_SM_ABORT = 0x13
+    CMD_SM_SOFT_ABORT = 0x15
+    CMD_FAST_TX_FLUSH = 0x14
+    CMD_HITPIX_DAC = 0x20
+    CMD_FUNCTION_CARD = 0x30
     # registers
-    ADDR_TIMER             = 0x00
-    ADDR_SM_STATUS         = 0x10
+    ADDR_TIMER = 0x00
+    ADDR_SM_STATUS = 0x10
     ADDR_SM_INJECTION_CTRL = 0x11
-    ADDR_SM_INVERT_PINS    = 0x12
-    ADDR_MMCM_CONFIG_0     = 0x20
-    ADDR_MMCM_CONFIG_1     = 0x21
-    ADDR_MMCM_CONFIG_2     = 0x22
-    ADDR_RO_CLKS_DIV1      = 0x30
-    ADDR_VERSION           = 0xf0
+    ADDR_SM_INVERT_PINS = 0x12
+    ADDR_MMCM_CONFIG_0 = 0x20
+    ADDR_MMCM_CONFIG_1 = 0x21
+    ADDR_MMCM_CONFIG_2 = 0x22
+    ADDR_RO_CLKS_DIV1 = 0x30
+    ADDR_VERSION = 0xf0
 
     class ReadoutError(Exception):
         # error codes
-        ERROR_OK   = 0x00
+        ERROR_OK = 0x00
         ERROR_BUSY = 0x0b
         ERROR_COMMAND = 0x0c
-        ERROR_EOP  = 0x0e
+        ERROR_EOP = 0x0e
         errors = {
             ERROR_OK: 'ERROR_OK',
             ERROR_BUSY: 'ERROR_BUSY',
             ERROR_COMMAND: 'ERROR_COMMAND',
             ERROR_EOP: 'ERROR_EOP',
         }
+
         def __init__(self, code: int) -> None:
             code_str = self.errors.get(code, f'0x{code:02X}')
             super().__init__(f'readout error code {code_str}')
@@ -57,17 +60,17 @@ class Readout:
         self._serial_port = serial.Serial(serial_name, 3_000_000)
         self._response_queue: queue.Queue[Response] = queue.Queue()
         self.event_stop = threading.Event()
-        self._thread_read_serial = threading.Thread(target=self._read_serial, daemon=True, name='readout')
+        self._thread_read_serial = threading.Thread(
+            target=self._read_serial, daemon=True, name='readout')
         self._thread_read_serial.start()
         self._timeout = timeout
-        self._time_sync: Optional[tuple[int, float]] = None
         self._serial_port.set_low_latency_mode(True)
         self._sm_error_count = 0
         self._sm_prog_bits = 12
         self.frequency_mhz = float('nan')
         self.frequency_mhz_set = float('nan')
         self.debug_responses = False
-    
+
     def close(self) -> None:
         self.event_stop.set()
         self._thread_read_serial.join()
@@ -98,7 +101,7 @@ class Readout:
                     response.event.set()
                 except queue.Empty:
                     print('readout received unexpected response', packet)
-    
+
     def _expect_response(self, name: Optional[str] = None) -> Response:
         if (not name) and self.debug_responses:
             lines = '\n'.join(traceback.format_stack())
@@ -120,11 +123,10 @@ class Readout:
         self._response_queue.put(response)
         return response
 
-    
     def send_packet(self, packet: bytes) -> None:
         self._serial_port.write(b'\x00' + cobs.encode(packet) + b'\x00')
         self._serial_port.flushOutput()
-    
+
     def send_packets(self, packets: Iterable[bytes]) -> None:
         data = bytearray(b'\x00')
         for packet in packets:
@@ -132,13 +134,14 @@ class Readout:
             data.append(0)
         self._serial_port.write(data)
         self._serial_port.flushOutput()
-    
+
     def write_register(self, address: int, value: int) -> None:
         assert address in range(256)
         assert value in range(1 << 32)
         self._expect_response()
-        self.send_packet(bytes([self.CMD_REGISTER_WRITE, address]) + value.to_bytes(4, 'little'))
-    
+        self.send_packet(
+            bytes([self.CMD_REGISTER_WRITE, address]) + value.to_bytes(4, 'little'))
+
     def read_register(self, address: int) -> int:
         assert address in range(256)
         response = self._expect_response()
@@ -148,7 +151,7 @@ class Readout:
         assert response.data is not None
         assert len(response.data) == 4
         return int.from_bytes(response.data, 'little')
-    
+
     def sm_exec(self, assembly: InstructionsLike) -> None:
         assembly_int = [
             instr if isinstance(instr, int) else instr.to_binary()
@@ -158,18 +161,20 @@ class Readout:
         # write to board
         self._expect_response()
         self.send_packet(bytes([self.CMD_SM_EXEC]) + data)
-    
+
     def sm_write(self, assembly: InstructionsLike, offset: int = 0) -> int:
         '''returns offset of next instruction'''
         assembly_int = [
             instr if isinstance(instr, int) else instr.to_binary()
             for instr in assembly
         ]
-        assert (len(assembly_int) + offset) <= (1 << self._sm_prog_bits), 'sm prog too large'
+        assert (len(assembly_int) + offset) <= (1 <<
+                                                self._sm_prog_bits), 'sm prog too large'
         data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
         self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_WRITE]) + offset.to_bytes(2, 'little') + data)
+        self.send_packet(bytes([self.CMD_SM_WRITE]) +
+                         offset.to_bytes(2, 'little') + data)
         return offset + len(assembly_int)
 
     def sm_start(self, runs: int = 1, offset: int = 0, packets: int = 1) -> None:
@@ -203,45 +208,38 @@ class Readout:
     def fast_tx_flush(self) -> None:
         self._expect_response()
         self.send_packet(bytes([self.CMD_FAST_TX_FLUSH]))
-    
-    def synchronize(self) -> None:
+
+    def get_synchronization(self) -> TimeSync:
         sync_time = time.time()
         sync_counter = self.read_register(self.ADDR_TIMER)
-        self._time_sync = (sync_counter, sync_time)
-    
-    def convert_time(self, counter: Any) -> Any:
-        # use Any type to allow ints and ndarrays
-        if self._time_sync is None:
-            raise Exception('time not synchronized')
-        counter_sync, time_sync = self._time_sync
-        counter_diff = (counter - counter_sync) & ((1 << 32) - 1) # convert to unsigned
-        return time_sync + counter_diff * 1e-6
-    
+        return TimeSync(sync_counter, sync_time, 1e-6)
+
     def set_injection_ctrl(self, on_cycles: int, off_cycles: int) -> None:
         assert (on_cycles - 1) in range(1 << 16)
         assert (off_cycles - 1) in range(1 << 16)
-        self.write_register(self.ADDR_SM_INJECTION_CTRL, (on_cycles - 1) | ((off_cycles - 1) << 16))
-    
+        self.write_register(self.ADDR_SM_INJECTION_CTRL,
+                            (on_cycles - 1) | ((off_cycles - 1) << 16))
+
     def _write_function_card_raw(self, data: bytes) -> None:
         self._expect_response()
         self.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
-    
+
     def set_readout_clock_sequence(self, clk1: int, clk2: int) -> None:
         assert clk1 in range(1 << 12)
         assert clk2 in range(1 << 12)
         self.write_register(self.ADDR_RO_CLKS_DIV1, (clk2 << 16) | clk1)
-    
+
     def initialize(self) -> None:
         try:
             # set all enable pins high
             self.fast_tx_flush()
             self._write_function_card_raw(b'\xff')
-            self.synchronize()
             # check version
             version = self.get_version()
             # supported versions
             if version.readout not in [0x015]:
-                raise RuntimeError(f'unsupported readout version 0x{version.readout:04X}')
+                raise RuntimeError(
+                    f'unsupported readout version 0x{version.readout:04X}')
             # sm prog
             if version.readout >= 0x0010:
                 self._sm_prog_bits = 14
@@ -270,15 +268,18 @@ class Readout:
     def write_function_card(self, slot_id: int, data: bytes) -> None:
         assert slot_id in range(8)
         # set CS low
-        mask = (~(1 << (7 - slot_id))) & 0xff # shift register outputs are swapped on gecco
+        # shift register outputs are swapped on gecco
+        mask = (~(1 << (7 - slot_id))) & 0xff
         packets = [
-            bytes([self.CMD_FUNCTION_CARD, mask]), # enable cs line for this slot
-            bytes([self.CMD_FUNCTION_CARD]) + data + b'\xff', # write data and set CS high
+            # enable cs line for this slot
+            bytes([self.CMD_FUNCTION_CARD, mask]),
+            bytes([self.CMD_FUNCTION_CARD]) + data + \
+            b'\xff',  # write data and set CS high
         ]
         for _ in packets:
             self._expect_response()
         self.send_packets(packets)
-    
+
     @dataclass
     class SmStatus:
         remaining_runs: int
@@ -293,10 +294,10 @@ class Readout:
             print(f'SM errors: {error_count}')
             self._sm_error_count = error_count
         return Readout.SmStatus(
-            remaining_runs = value & 0xffff,
-            error_count    = error_count,
-            idle           = (value & (1 << 24)) != 0,
-            active         = (value & (1 << 25)) != 0,
+            remaining_runs=value & 0xffff,
+            error_count=error_count,
+            idle=(value & (1 << 24)) != 0,
+            active=(value & (1 << 25)) != 0,
         )
 
     def wait_sm_idle(self, timeout: float = 1.) -> None:
@@ -304,15 +305,17 @@ class Readout:
         while self.get_sm_status().active:
             if time.monotonic() > t_timeout:
                 raise TimeoutError('statemachine not idle')
-    
+
     def set_system_clock(self, frequency_mhz: float, dry_run: bool = False) -> float:
         '''set system clock frequency to nearest possible value
         param frequency_mhz: bit rate when using lowest divider setting
         '''
         assert frequency_mhz <= 190.0
         from util.xilinx import pll7series
+
         # find values for 4x bitrate (output divider is doubled in FPGA)
-        div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(100.0, 6 * frequency_mhz)
+        div_fb, div_out, freq_gen = pll7series.optimize_vco_and_divider(
+            100.0, 6 * frequency_mhz)
         if dry_run:
             return freq_gen / 6
         regs = pll7series.get_register_values(div_fb, div_out, 'optimized')
@@ -324,7 +327,8 @@ class Readout:
         # wait for hardware
         time.sleep(0.8)
         try:
-            while True: self._response_queue.get_nowait()
+            while True:
+                self._response_queue.get_nowait()
         except queue.Empty:
             pass
         # update system frequency
@@ -333,7 +337,7 @@ class Readout:
         # re-initialize
         self.initialize()
         return self.frequency_mhz
-    
+
     ############################################################################
 
     @dataclass

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from typing import Literal, Optional, cast, Any
 
+from frames.io import save_frame_attrs
+
 
 def __get_config_dict_ext() -> dict:
     return {
@@ -146,18 +148,19 @@ def main(
                 # extract all values
                 config = config_from_dict(config_dict)
                 set_voltages(config)
+                # store measurement
+                group = file.create_group(group_name)
+                save_frame_attrs(group, config)
                 # perform measurement
                 prog_meas.reset()
                 ro.sm_abort()
-                frames, times = read_frames(ro, fastreadout, config, prog_meas)
-                # sums -> sum up all frames
-                if sums_only:
-                    frames = frames.sum(axis=0, keepdims=True)
-                    times = times[:1]
-                # store measurement
-                group = file.create_group(group_name)
-                save_frames(group, config, frames, times)
+                assert not sums_only
+                read_frames(ro, fastreadout, config, prog_meas, h5group=group)
                 prog_scan.update()
+                # # sums -> sum up all frames
+                # if sums_only:
+                #     frames = frames.sum(axis=0, keepdims=True)
+                #     times = times[:1]
     else:
         util.gridscan.apply_set(config_dict_template, args_set)
         config = config_from_dict(config_dict_template)
@@ -227,17 +230,19 @@ def main(
                 daemon=True,
             ).start()
 
-        frames, times = read_frames(
-            ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True), callback)
-
-        if sums_only:
-            frames = frames.sum(axis=0, keepdims=True)
-            times = times[:1]
-
         with h5py.File(path_output, 'w') as file:
             file.attrs['commandline'] = sys.argv
             group = file.create_group('frames')
-            save_frames(group, config, frames, times)
+            save_frame_attrs(group, config)
+            assert not sums_only
+            read_frames(
+                ro,
+                fastreadout,
+                config,
+                tqdm.tqdm(dynamic_ncols=True),
+                callback,
+                h5group=group,
+            )
 
 
 if __name__ == '__main__':

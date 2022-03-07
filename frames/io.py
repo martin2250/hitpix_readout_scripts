@@ -1,14 +1,16 @@
 import dataclasses
-from dataclasses import dataclass
-import h5py
-import json
 import datetime
-import numpy as np
-from typing import cast
+import json
+from dataclasses import dataclass
+from typing import Optional, cast
 
+import h5py
 import hitpix
+import numpy as np
+from util.time_sync import TimeSync
 
 ################################################################################
+
 
 @dataclass
 class FrameConfig:
@@ -38,7 +40,8 @@ class FrameConfig:
         if not 'setup_name' in d:
             d['setup_name'] = 'hitpix1'
         setup_name = d['setup_name']
-        dac_cfg = hitpix.setups[setup_name].chip.dac_config_class(**d['dac_cfg'])
+        dac_cfg = hitpix.setups[setup_name].chip.dac_config_class(
+            **d['dac_cfg'])
         del d['dac_cfg']
         # TODO: remove this, HV should always be set
         for name in ['voltage_hv', 'voltage_vdd', 'voltage_vssa']:
@@ -57,15 +60,35 @@ class FrameConfig:
             **d,
         )
 
-def save_frames(h5group: h5py.Group, config: FrameConfig, frames: np.ndarray, times: np.ndarray):
+
+def save_frame_attrs(
+    h5group: h5py.Group,
+    config: FrameConfig,
+):
     # attributes
     h5group.attrs['save_time'] = datetime.datetime.now().isoformat()
     h5group.attrs['config'] = json.dumps(config.asdict())
+
+
+def save_frames(
+    h5group: h5py.Group,
+    config: FrameConfig,
+    frames: np.ndarray,
+    times: np.ndarray,
+    time_sync: TimeSync,
+):
+    save_frame_attrs(h5group, config)
     # data
     h5group.create_dataset('frames', data=frames, compression='gzip')
-    h5group.create_dataset('times', data=times, compression='gzip')
+    dset_times = h5group.create_dataset(
+        'times', data=times, compression='gzip')
+    dset_times.attrs['sync'] = json.dumps(time_sync.asdict())
 
-def load_frames(h5group: h5py.Group, load_times = True) -> tuple[FrameConfig, np.ndarray, np.ndarray]:
+
+def load_frames(
+    h5group: h5py.Group,
+    load_times=True,
+) -> tuple[FrameConfig, np.ndarray, Optional[np.ndarray], Optional[TimeSync]]:
     # load attributes
     config_dict = json.loads(cast(str, h5group.attrs['config']))
     # TODO: remove this eventually
@@ -77,13 +100,18 @@ def load_frames(h5group: h5py.Group, load_times = True) -> tuple[FrameConfig, np
     assert isinstance(dset_frames, h5py.Dataset)
     frames = dset_frames[()]
     assert isinstance(frames, np.ndarray)
+    # skip loading times
+    if not load_times:
+        return config, frames, None, None
     # load times
-    if load_times and 'times' in h5group:
-        dset_times = h5group['times']
-        assert isinstance(dset_times, h5py.Dataset)
-        times = dset_times[()]
-        assert isinstance(times, np.ndarray)
-    else:
-        # TODO: remove this eventually
-        times = np.full(frames.shape[0], np.nan)
-    return config, frames, times
+    dset_times = h5group['times']
+    assert isinstance(dset_times, h5py.Dataset)
+    times = dset_times[()]
+    assert isinstance(times, np.ndarray)
+    # time sync available?
+    if not 'sync' in dset_times.attrs:
+        return config, frames, times, None
+    # load time sync
+    sync_dict = cast(str, dset_times.attrs['sync'])
+    time_sync = TimeSync.fromdict(json.loads(sync_dict))
+    return config, frames, times, time_sync
