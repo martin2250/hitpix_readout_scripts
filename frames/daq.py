@@ -4,7 +4,7 @@ import queue
 import time
 from typing import Optional
 
-import numpy as np, numpy._globals
+import numpy as np
 import tqdm
 from hitpix import HitPixSetup
 from readout import Response
@@ -17,6 +17,7 @@ from .io import FrameConfig
 from .sm_prog import prog_read_frames
 import threading
 
+
 def _decode_responses(
     responses: list[Response],
     frames: list[np.ndarray],
@@ -24,9 +25,9 @@ def _decode_responses(
     timeout: float,
     setup: HitPixSetup,
     reset_counters: bool,
-    callback = None,
+    callback=None,
     progress: Optional[tqdm.tqdm] = None,
-    ):
+):
     ctr_max = 1 << setup.chip.bits_counter
     hits_last = None
 
@@ -35,8 +36,17 @@ def _decode_responses(
         assert response.data is not None
 
         # decode hits
-        block_timestamps, block_frames = decode_column_packets(response.data, setup.pixel_columns, setup.chip.bits_adder, setup.chip.bits_counter)
-        block_frames = block_frames.reshape(-1, setup.pixel_rows, setup.pixel_columns)
+        block_timestamps, block_frames = decode_column_packets(
+            response.data,
+            setup.pixel_columns,
+            setup.chip.bits_adder,
+            setup.chip.bits_counter
+        )
+        block_frames = block_frames.reshape(
+            -1,
+            setup.pixel_rows,
+            setup.pixel_columns
+        )
 
         if not reset_counters:
             if hits_last is None:
@@ -48,8 +58,9 @@ def _decode_responses(
             block_frames = np.diff(block_frames, axis=0, prepend=hits_last)
             hits_last = hits_last_next
 
-        block_frames = (ctr_max - block_frames) % ctr_max  # counter counts down
-        
+        # counter counts down
+        block_frames = (ctr_max - block_frames) % ctr_max
+
         if callback:
             callback(block_frames)
         frames.append(block_frames)
@@ -60,13 +71,20 @@ def _decode_responses(
             progress.update(block_frames.shape[0])
 
 
-def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig, progress: Optional[tqdm.tqdm] = None, callback = None) -> tuple[np.ndarray, np.ndarray]:
+def read_frames(
+        ro: HitPixReadout,
+        fastreadout: FastReadout,
+        config: FrameConfig,
+        progress: Optional[tqdm.tqdm] = None,
+        callback=None
+) -> tuple[np.ndarray, np.ndarray]:
     ############################################################################
     # set up readout
 
     if ro.frequency_mhz_set != config.readout_frequency:
         print(f'setting frequency to {config.readout_frequency=}')
-        config.readout_frequency = ro.set_system_clock(config.readout_frequency)
+        config.readout_frequency = ro.set_system_clock(
+            config.readout_frequency)
         print(f'actual: {config.readout_frequency}')
 
     ############################################################################
@@ -119,7 +137,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
 
     duration_run = frames_per_run * duration_frame
     duration_total = num_runs * duration_run
-    
+
     timeout_run = 1.0 + 1.5 * duration_run
     timeout_total = 5.0 + 1.5 * duration_total
 
@@ -132,7 +150,7 @@ def read_frames(ro: HitPixReadout, fastreadout: FastReadout, config: FrameConfig
     responses = [fastreadout.expect_response() for _ in range(num_runs)]
     frames = []
     timestamps = []
-    
+
     t_decode = threading.Thread(
         target=_decode_responses,
         daemon=True,
