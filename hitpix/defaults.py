@@ -26,7 +26,7 @@ dac_default_hitpix2 = {
     'ipload2': 3,
     'vncomp': 1,
     'ipfoll': 1,
-    'vth': 127,
+    'vth': 170,
 }
 
 # blres ~ vnfb --> entladung / fallende Flanke
