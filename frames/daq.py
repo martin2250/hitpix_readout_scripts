@@ -6,7 +6,8 @@ from typing import Optional
 
 import h5py
 import numpy as np
-import tqdm
+from rich import print
+from rich.progress import Progress, TaskID
 from hitpix import HitPixSetup
 from hitpix.readout import HitPixReadout
 from readout.fast_readout import FastReadout
@@ -28,7 +29,7 @@ def _decode_responses(
     evt_stop: threading.Event,
     num_runs: Optional[int] = None,
     callback=None,
-    progress: Optional[tqdm.tqdm] = None,
+    progress: Optional[tuple[Progress, TaskID]] = None,
     h5data: Optional[tuple[h5py.Dataset, h5py.Dataset]] = None,
 ):
     ctr_max = 1 << setup.chip.bits_counter
@@ -99,14 +100,15 @@ def _decode_responses(
 
         frames_total += block_numframes
         if progress is not None:
-            progress.update(block_numframes)
+            prog, task = progress
+            prog.update(task, advance=block_numframes)
 
 
 def read_frames(
     ro: HitPixReadout,
     fastreadout: FastReadout,
     config: FrameConfig,
-    progress: Optional[tqdm.tqdm] = None,
+    progress: Optional[tuple[Progress, TaskID]] = None,
     callback=None,
     evt_stop: Optional[threading.Event] = None,
     h5group: Optional[h5py.Group] = None,
@@ -177,10 +179,12 @@ def read_frames(
     timeout_total = 5.0 + 1.5 * duration_total
 
     if progress is not None:
+        prog, task = progress
         if config.num_frames > 0:
-            progress.total = frames_per_run * num_runs
+            prog.start_task(task)
+            prog.update(task, total=frames_per_run * num_runs)
         else:
-            progress.total = None
+            prog.update(task, total=1)
 
     ############################################################################
     # set up h5 storage
