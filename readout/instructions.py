@@ -1,22 +1,29 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from dataclasses import dataclass
+from typing import Iterable
 
 class Instruction(ABC):
     @abstractmethod
     def to_binary(self) -> int:
         raise NotImplementedError()
 
+    @abstractmethod
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        raise NotImplementedError()
+
 @dataclass
 class Sleep(Instruction):
-    def __init__(self, cycles: int) -> None:
-        self.cycles = cycles
+    cycles: int
     
     def to_binary(self) -> int:
-        assert (self.cycles - 1) in range(1 << 24)
+        assert (self.cycles - 2) in range(1 << 24)
         # config
         instr_mask = 0b00010001 << 24
-        return instr_mask | (self.cycles - 1)
+        return instr_mask | (self.cycles - 2)
+
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return self.cycles
 
 @dataclass
 class Inject(Instruction):
@@ -30,6 +37,9 @@ class Inject(Instruction):
         instr_mask |= (self.injection_count - 1)
         instr_mask |= self.injection_sel << 16
         return instr_mask
+
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return self.injection_count * 1000
 
 @dataclass
 class SetCfg(Instruction):
@@ -73,6 +83,9 @@ class SetCfg(Instruction):
             s.__setattr__(k, v)
         return s
 
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return 1
+
 @dataclass
 class SetPins(Instruction):
     pins: int
@@ -91,6 +104,9 @@ class SetPins(Instruction):
     def get_pin(self, pin_number: int) -> bool:
         return (self.pins & (1 << pin_number)) != 0
 
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return 1
+
 @dataclass
 class ShiftIn24(Instruction):
     '''shift in 17 to 24 bits. optionally, also shift out simultaneously'''
@@ -106,6 +122,13 @@ class ShiftIn24(Instruction):
         instr_mask |= self.shift_out << 24
         instr_mask |= self.data_tx
         return instr_mask
+
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        match cfg.shift_clk_div:
+            case 0: return self.num_bits + 1
+            case 1: return 2 * self.num_bits
+            case 2: return 4 * self.num_bits
+            case _: return 66 * self.num_bits
 
 @dataclass
 class ShiftIn16(Instruction):
@@ -123,6 +146,14 @@ class ShiftIn16(Instruction):
         instr_mask |= self.data_tx << 8
         return instr_mask
 
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        match cfg.shift_clk_div:
+            case 0: return self.num_bits + 1
+            case 1: return 2 * self.num_bits
+            case 2: return 4 * self.num_bits
+            case _: return 66 * self.num_bits
+
+
 @dataclass
 class ShiftOut(Instruction):
     '''shift out up to 2**12 bits'''
@@ -136,6 +167,13 @@ class ShiftOut(Instruction):
         instr_mask |= (self.num_bits - 1)
         return instr_mask
 
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        match cfg.shift_clk_div:
+            case 0: return self.num_bits + 1
+            case 1: return 2 * self.num_bits
+            case 2: return 4 * self.num_bits
+            case _: return 66 * self.num_bits
+
 @dataclass
 class Reset(Instruction):
     '''reset output shift register'''
@@ -148,27 +186,50 @@ class Reset(Instruction):
         instr_mask |= self.reset_tx << 0
         return instr_mask
 
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return 1
+
 
 @dataclass
 class GetTime(Instruction):
     '''end of program'''
-    def __init__(self) -> None:
-        pass
 
     def to_binary(self) -> int:
         return 0b00010101 << 24
 
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return 1
+
 @dataclass
 class Finish(Instruction):
     '''end of program'''
-    def __init__(self) -> None:
-        pass
 
     def to_binary(self) -> int:
         return 0
 
+
+    def count_cycles(self, cfg: 'SetCfg') -> int:
+        return 1
+        
 @dataclass
 class Wait(Instruction):
     '''wait for external signal with id <signal_number> to read <signal_value>'''
     signal_number: int
     signal_value: bool
+
+def count_cycles(instructions: Iterable[Instruction]) -> int:
+    cfg = SetCfg(
+        shift_rx_invert=False,
+        shift_tx_invert=False,
+        shift_toggle=False,
+        shift_select_dac=False,
+        shift_word_len=8,
+        shift_clk_div=0,
+        shift_sample_latency=30,
+    )
+    cycles = 0
+    for instruction in instructions:
+        cycles += instruction.count_cycles(cfg)
+        if isinstance(instruction, SetCfg):
+            cfg = instruction
+    return cycles

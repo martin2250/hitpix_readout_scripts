@@ -59,16 +59,29 @@ def prog_shift_dense(data_tx: bitarray.bitarray, shift_out: bool) -> list[Instru
     return prog
 
 
-def prog_sleep(sleep_cycles: int) -> list[Instruction]:
+def prog_sleep(sleep_cycles: int, single_cycle: Optional[Instruction] = None) -> list[Instruction]:
+    # handle simple cases
+    if sleep_cycles == 0:
+        return []
+    if sleep_cycles == 1:
+        assert single_cycle is not None
+        return [single_cycle]
+    # handle other cases
+    cycles_max = (1 << 24) + 1
     prog = []
     while sleep_cycles > 0:
-        sleep_cycles_i = min(sleep_cycles, 1 << 24)
-        prog.append(Sleep(sleep_cycles_i))
-        sleep_cycles -= sleep_cycles_i
+        cycles = min(sleep_cycles, cycles_max)
+        sleep_cycles -= cycles
+        # 1 cycle remaining? not supported without single cycle
+        # -> borrow one cycle for the next sleep instruction
+        if sleep_cycles == 1:
+            cycles -= 1
+            sleep_cycles += 1
+        prog.append(Sleep(cycles))
     return prog
 
 
-def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13, bits_mask: int = 8) -> tuple[np.ndarray, np.ndarray]:
+def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13, bits_mask: Optional[int] = 8) -> tuple[np.ndarray, np.ndarray]:
     '''decode column packets with timestamps'''
     # check that packet has right size for 32 bit ints
     assert (len(packet) % 4) == 0
@@ -82,11 +95,13 @@ def decode_column_packets(packet: bytes, columns: int = 24, bits_shift: int = 13
     # get hits
     hits_raw = data[:, 1:].flat
     # duplicate all numbers to extract both <bits> bit values
-    bit_mask = (1 << bits_mask) - 1
     hits = np.dstack((
-        np.bitwise_and(np.right_shift(hits_raw, bits_shift), bit_mask),
-        np.bitwise_and(hits_raw, bit_mask),
+        np.right_shift(hits_raw, bits_shift),
+        hits_raw,
     ))
+    if bits_mask is not None:
+        bit_mask = (1 << bits_mask) - 1
+        hits = np.bitwise_and(hits, bit_mask)
     hits = np.reshape(hits, (-1, columns))
     # counter count down
     return timestamps, hits
@@ -190,3 +205,19 @@ def prog_read_matrix(setup: HitPixSetup, shift_clk_div: int = 1, pulse_cycles: i
             ),
         ])
     return prog
+
+if __name__ == '__main__':
+    import unittest
+
+    class TestProgSleep(unittest.TestCase):
+        def test_sleeps(self):
+            for xx in range(5):
+                for count in range(20):
+                    cycles = max(0, xx * (1 << 24) - 10 + count)
+                    prog = prog_sleep(cycles, SetPins(0))
+                    calc = count_cycles(prog)
+                    self.assertEqual(cycles, calc)
+                    for instr in prog:
+                        instr.to_binary()
+    
+    unittest.main()
