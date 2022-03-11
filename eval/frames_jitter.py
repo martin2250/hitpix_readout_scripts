@@ -3,9 +3,10 @@
 '''
 
 import argparse
+import math
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 import h5py
 import matplotlib.colors
@@ -52,7 +53,6 @@ with h5py.File(args.input_file) as file:
     # load frames group
     group_frames = file[h5group]
     assert isinstance(group_frames, h5py.Group)
-    config, hits, _ = frames.io.load_frames(group_frames, load_times=False)
     # load times dataset
     dset_times = group_frames['times']
     assert isinstance(dset_times, h5py.Dataset)
@@ -60,9 +60,18 @@ with h5py.File(args.input_file) as file:
     assert isinstance(times, np.ndarray)
 
 # microseconds
-time_diff = np.diff(times) * 1e6
+time_diff = np.diff(times).astype(np.int32)
 
-bins = np.arange(120, 140)
-plt.hist(time_diff, bins)
+tmin = np.min(time_diff)
+tmax = np.max(time_diff)
+
+if (tmax - tmin) < 100:
+    bins = np.arange(math.floor(tmin - 5), math.ceil(tmax + 5))
+else:
+    bins = np.geomspace(tmin, tmax, 100)
+
+plt.hist(time_diff, cast(Any, bins))
 plt.semilogy()
+plt.semilogx()
+plt.xlabel('time interval (µs)')
 plt.show()

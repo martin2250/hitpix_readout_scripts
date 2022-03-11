@@ -52,7 +52,7 @@ if __name__ == '__main__':
             prefix = 'scurve'
         group_frames = file[prefix + '_0' * len(scan_shape)]
         assert isinstance(group_frames, h5py.Group)
-        config, hit_frames_first, _ = frames.io.load_frames(group_frames)
+        config, hit_frames_first, _ , _= frames.io.load_frames(group_frames)
         # create full data array
         hits_frames = np.zeros(scan_shape + hit_frames_first.shape)
         # store first scurve
@@ -65,13 +65,14 @@ if __name__ == '__main__':
             group_name = prefix + '_' + '_'.join(str(i) for i in idx)
             group_frame = file[group_name]
             assert isinstance(group_frame, h5py.Group)
-            _, hits_frames_group, _ = frames.io.load_frames(group_frame)
+            _, hits_frames_group, _, _ = frames.io.load_frames(group_frame)
             hits_frames[idx] = hits_frames_group
 
     ################################################################################
     # calculate pixel properties
 
     hits_frames = hits_frames.sum(axis=-3)
+    print(hits_frames)
     # convert to hits/s
     hits_frames = hits_frames / (config.frame_length_us * config.num_frames * 1e-6)
 
