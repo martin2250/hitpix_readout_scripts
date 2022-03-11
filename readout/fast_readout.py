@@ -101,7 +101,6 @@ class FastReadout:
                     if self.orphan_response_queue is not None:
                         self.orphan_response_queue.put(data)
                         continue
-                    print('x', end='')
         proc.join()
 
     def expect_response(self) -> Response:

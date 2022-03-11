@@ -115,7 +115,7 @@ def parse_int_range(range_str: str) -> list[int]:
     if range_str.startswith('['):
         assert range_str.endswith(']')
         parts = range_str[1:-1].split(',')
-        return [int(p) for p in parts]
+        return [int(p) for p in parts if p]
     else:
         parts = range_str.split(':')
         assert len(parts) in (1, 2, 3)

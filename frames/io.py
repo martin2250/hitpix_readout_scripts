@@ -24,6 +24,7 @@ class FrameConfig:
     frame_length_us: float
     pause_length_us: float
     reset_counters: bool
+    rows: np.ndarray
     read_adders: bool
     setup_name: str
     readout_frequency: float
@@ -33,6 +34,7 @@ class FrameConfig:
     def asdict(self) -> dict:
         d = dataclasses.asdict(self)
         d['dac_cfg'] = dataclasses.asdict(self.dac_cfg)
+        d['rows'] = self.rows.tolist()
         return d
 
     @staticmethod
@@ -55,6 +57,9 @@ class FrameConfig:
             d['readout_frequency'] = 25.0
         if not 'pulse_ns' in d:
             d['pulse_ns'] = -1.0
+        if not 'rows' in d:
+            d['rows'] = [-1]
+        d['rows'] = np.array(d['rows'], dtype=np.uint)
         return FrameConfig(
             dac_cfg=dac_cfg,
             **d,

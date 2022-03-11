@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from tracemalloc import start
 from typing import Any, Literal, Optional, cast
 
 
@@ -8,7 +7,7 @@ def __get_config_dict_ext() -> dict:
         'frame_us': 5000.0,
         'pause_us': 0.0,
         'hv': 5.0,
-        'reset_counters': 0,
+        'reset_counters': 1,
     }
 
 
@@ -18,6 +17,7 @@ def main(
     num_frames: int,
     args_scan: list[str],
     args_set: list[str],
+    rows_str: str,
     read_adders: bool,
     file_exists: Literal['delete', 'continue', 'exit', 'ask'],
     sums_only: bool,
@@ -37,14 +37,14 @@ def main(
     import h5py
     import numpy as np
     from rich import print
-    from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn,BarColumn,TimeRemainingColumn
+    from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn, BarColumn, TimeRemainingColumn
 
     import hitpix
     import hitpix.defaults
     import util.configuration
     import util.gridscan
     import util.helpers
-    import util.voltage_channel
+    from util.voltage_channel import open_voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frame_attrs
     from hitpix.readout import HitPixReadout
@@ -53,6 +53,14 @@ def main(
     ############################################################################
 
     setup = hitpix.setups[setup_name]
+
+    # rows
+    if rows_str == 'all':
+        rows = np.array(np.arange(setup.pixel_rows, dtype=np.uint))
+    else:
+        rows = np.array(util.gridscan.parse_int_range(rows_str), dtype=np.uint)
+    
+    # scan
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
     config_dict_template = {
@@ -64,6 +72,9 @@ def main(
     ############################################################################
 
     def config_from_dict(config_dict: dict) -> FrameConfig:
+        # reading adders only makes sense when resetting counters
+        if read_adders:
+            assert bool(config_dict['reset_counters'])
         return FrameConfig(
             dac_cfg=config_dict['dac'],
             voltage_baseline=config_dict['baseline'],
@@ -75,6 +86,7 @@ def main(
             frame_length_us=config_dict['frame_us'],
             pause_length_us=config_dict['pause_us'],
             readout_frequency=config_dict['frequency'],
+            rows=rows,
             read_adders=read_adders,
             reset_counters=bool(config_dict['reset_counters']),
             pulse_ns=config_dict['pulse_ns'],
@@ -88,21 +100,23 @@ def main(
 
     ############################################################################
     # open readout
-    print('connecting to readout')
+    print('[yellow]connecting to readout')
 
     config_readout = util.configuration.load_config()
     serial_port_name, board = config_readout.find_board()
 
     fastreadout = FastReadout(board.fastreadout_serial_number)
-    atexit.register(fastreadout.close)
+    atexit.register(
+        lambda: print('[yellow]closing fastreadout') or fastreadout.close(),
+    )
 
     time.sleep(0.05)
     ro = HitPixReadout(serial_port_name, setup)
     ro.initialize()
-    atexit.register(ro.close)
+    atexit.register(lambda: print('[yellow]closing readout') or ro.close())
 
     ############################################################################
-    print('connecting to power supplies')
+    print('[yellow]connecting to power supplies')
 
     if hv_driver == 'default':
         hv_driver = board.default_hv_driver
@@ -113,24 +127,25 @@ def main(
     if vssa_driver == 'default':
         vssa_driver = board.default_vssa_driver
 
-    hv_channel = util.voltage_channel.open_voltage_channel(hv_driver, 'HV')
-    vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, 'VDD')
-    vssa_channel = util.voltage_channel.open_voltage_channel(
-        vssa_driver, 'VSSA')
+    hv_channel = open_voltage_channel(hv_driver, 'HV')
+    vdd_channel = open_voltage_channel(vdd_driver, 'VDD')
+    vssa_channel = open_voltage_channel(vssa_driver, 'VSSA')
 
     def set_voltages(config: FrameConfig):
         hv_channel.set_voltage(config.voltage_hv)
         vdd_channel.set_voltage(config.voltage_vdd)
         vssa_channel.set_voltage(config.voltage_vssa)
 
-    atexit.register(hv_channel.shutdown)
+    atexit.register(
+        lambda: print('[yellow]powering off HV') or hv_channel.shutdown(),
+    )
 
     ############################################################################
 
     evt_stop = threading.Event()
 
     def handle_int(*_):
-        print('interrupted by SIGINT, stopping')
+        print('interrupted by [red]SIGINT[/red], stopping')
         evt_stop.set()
 
     signal.signal(signal.SIGINT, handle_int)
@@ -141,11 +156,11 @@ def main(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        TextColumn("[progress.percentage]{task.completed:>6.0f}/{task.total:0.0f}"),
+        TextColumn(
+            "[progress.percentage]{task.completed:>6.0f}/{task.total:0.0f}"),
         TimeRemainingColumn(),
         TimeElapsedColumn(),
-        transient=True,
-        refresh_per_second = 5.0,
+        refresh_per_second=5.0,
     ) as progress:
         if scan_parameters:
             # do not allow infinite runtime in parameter scans (for now)
@@ -156,7 +171,8 @@ def main(
                 util.gridscan.save_scan(group_scan, scan_parameters)
                 file.attrs['commandline'] = sys.argv
                 # nested progress bars
-                task_scan = progress.add_task('Scan', total=np.product(scan_shape))
+                task_scan = progress.add_task(
+                    'Scan', total=np.product(scan_shape))
                 # scan over all possible combinations
                 for idx in np.ndindex(*scan_shape):
                     task_frames = progress.add_task('Frames', start=False)
@@ -279,7 +295,7 @@ def main(
                     h5group=group,
                 )
     size_mb = path_output.stat().st_size / (1 << 20)
-    print(f'total file size: {size_mb:0.2f} MB')
+    print(f'[green]total file size: {size_mb:0.2f} MB')
 
 
 if __name__ == '__main__':
@@ -339,10 +355,20 @@ if __name__ == '__main__':
         help='use SMU interface to set HV',
     )
 
-    # TODO: implement this
     parser.add_argument(
-        '--adders',
-        action='store_true',
+        '--rows',
+        default='all',
+        help='which rows to read, eg "10:12" or "[10, 11]"',
+    )
+
+    def parse_bool(s: str) -> bool:
+        if s.strip().lower() in ('1', 'true', 'yes', 'y', 't'): return True
+        if s.strip().lower() in ('0', 'false', 'no', 'n', 'f'): return False
+        raise ValueError()
+
+    parser.add_argument(
+        '--read_adders',
+        type=parse_bool, default=False,
         help='only read adders instead of full matrix',
     )
 
@@ -401,7 +427,8 @@ if __name__ == '__main__':
         num_frames=args.frames,
         args_scan=args.scan or [],
         args_set=args.set or [],
-        read_adders=args.adders,
+        rows_str=args.rows,
+        read_adders=args.read_adders,
         hv_driver=args.hv_driver,
         vssa_driver=args.vssa_driver,
         vdd_driver=args.vdd_driver,
