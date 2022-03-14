@@ -66,7 +66,12 @@ if __name__ == '__main__':
             group_frame = file[group_name]
             assert isinstance(group_frame, h5py.Group)
             _, hits_frames_group, _, _ = frames.io.load_frames(group_frame)
-            hits_frames[idx] = hits_frames_group
+            if hits_frames_group.shape == hits_frames[idx].shape:
+                hits_frames[idx] = hits_frames_group
+            else:
+                print(f'shapes do not match for {group_name=}')
+                print(f'{hits_frames_group.shape} / {hits_frames[idx].shape}')
+                hits_frames[idx + tuple(slice(0, x) for x in hits_frames_group.shape)] = hits_frames_group
 
     ################################################################################
     # calculate pixel properties

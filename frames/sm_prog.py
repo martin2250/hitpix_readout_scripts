@@ -33,6 +33,7 @@ def prog_read_frames(
         shift_sample_latency=setup.get_readout_latency(0, frequency),
     )
     pins = SetPins(0)
+    pulse_sleep = prog_sleep(pulse_cycles - 1, cfg_int)
 
     # init
     col_cfg_init = HitPixColumnConfig(0, 0, 0, -1)
@@ -41,8 +42,9 @@ def prog_read_frames(
         cfg_int,
         pins,
         *prog_shift_dense(setup.encode_column_config(col_cfg_init), False),
+        *pulse_sleep,
         pins.set_pin(ReadoutPins.ro_ldconfig, True),
-        Sleep(pulse_cycles),
+        *pulse_sleep,
         pins,
     ]
 
@@ -58,9 +60,9 @@ def prog_read_frames(
         prog.extend([
             # reset counters
             pins.set_pin(ReadoutPins.ro_rescnt, True),
-            Sleep(pulse_cycles),
+            *pulse_sleep,
             pins,
-            Sleep(pulse_cycles),
+            *pulse_sleep,
         ])
 
     prog.extend([
@@ -70,7 +72,7 @@ def prog_read_frames(
         pins.set_pin(ReadoutPins.ro_frame, True),
         *prog_sleep(frame_cycles),
         pins,
-        Sleep(pulse_cycles),
+        *pulse_sleep,
     ])
 
     for row_curr, row_next in zip(rows_curr, rows_next):
@@ -90,28 +92,30 @@ def prog_read_frames(
                 GetTime(),
                 # load count into column register
                 pins.set_pin(ReadoutPins.ro_ldcnt, True),
-                Sleep(pulse_cycles),
+                *pulse_sleep,
                 pins,
-                Sleep(pulse_cycles),
+                *pulse_sleep,
                 # shift one bit
                 pins_penable,
-                Sleep(pulse_cycles),
+                *pulse_sleep,
                 ShiftOut(1, False),
-                Sleep(pulse_cycles),
+                *pulse_sleep,
                 pins,
-                Sleep(pulse_cycles),
+                *pulse_sleep,
             ])
         # shift in + out data
         prog.extend([
             Reset(True, True),
             *prog_shift_dense(setup.encode_column_config(shift_col_cfg), shift_shiftout),
-            Sleep(pulse_cycles),
+            *pulse_sleep,
             pins.set_pin(ReadoutPins.ro_ldconfig, True),
-            Sleep(pulse_cycles),
+            *pulse_sleep,
             pins,
-            Sleep(pulse_cycles),
+            *pulse_sleep,
         ])
-
+    # make sure that all data is sent
+    # (otherwise readout packets could end up short with small pulse_cycles)
+    prog.append(Sleep(4))
     return prog_init, prog
 
 

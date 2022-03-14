@@ -175,6 +175,8 @@ def main(
                     'Scan', total=np.product(scan_shape))
                 # scan over all possible combinations
                 for idx in np.ndindex(*scan_shape):
+                    if evt_stop.is_set():
+                        break
                     task_frames = progress.add_task('Frames', start=False)
                     # check if this measurement is already present in file
                     group_name = 'frames_' + '_'.join(str(i) for i in idx)
@@ -189,21 +191,30 @@ def main(
                     # extract all values
                     config = config_from_dict(config_dict)
                     set_voltages(config)
-                    # store measurement
-                    group = file.create_group(group_name)
-                    save_frame_attrs(group, config)
-                    # perform measurement
-                    ro.sm_abort()
                     assert not sums_only
-                    read_frames(
-                        ro=ro,
-                        fastreadout=fastreadout,
-                        config=config,
-                        progress=(progress, task_frames),
-                        callback=None,
-                        evt_stop=evt_stop,
-                        h5group=group
-                    )
+                    for _ in range(3):
+                        try:
+                            # store measurement
+                            group = file.create_group(group_name)
+                            save_frame_attrs(group, config)
+                            # perform measurement
+                            ro.sm_abort()
+                            read_frames(
+                                ro=ro,
+                                fastreadout=fastreadout,
+                                config=config,
+                                progress=(progress, task_frames),
+                                callback=None,
+                                evt_stop=evt_stop,
+                                h5group=group
+                            )
+                            break
+                        except Exception as e:
+                            print(f'[red]exception: {e}, retrying')
+                            del file[group_name]
+                    else:
+                        raise Exception('too many retries')
+
                     progress.remove_task(task_frames)
                     progress.update(task_scan, advance=1)
                     # # sums -> sum up all frames

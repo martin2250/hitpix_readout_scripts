@@ -30,6 +30,7 @@ def _decode_responses(
     read_adders: bool,
     num_rows: int,
     evt_stop: threading.Event,
+    success: list[bool],
     num_runs: Optional[int] = None,
     callback=None,
     progress: Optional[tuple[Progress, TaskID]] = None,
@@ -59,7 +60,7 @@ def _decode_responses(
             if evt_stop.is_set():
                 break
             else:
-                raise e
+                return
         if (qs := response_queue.qsize()) > 10:
             print(f'[red] queue overflowing: {qs}')
         # decode hits
@@ -136,6 +137,7 @@ def _decode_responses(
         if progress is not None:
             prog, task = progress
             prog.update(task, advance=block_numframes)
+    success.append(True)
 
 
 def read_frames(
@@ -215,6 +217,7 @@ def read_frames(
     duration_frame += 1e-6 * readout_bits / ro.frequency_mhz
     # number of frames per readout packet
     frames_per_run = min(
+        config.frames_per_run,
         # limit frames per run to 1 << 16 (hardware)
         (1 << 16) - 2,
         # limit amount of data in a packet to 2 MB for less jitter
@@ -230,8 +233,8 @@ def read_frames(
 
     print(f'{duration_run=:0.2f}s {frames_per_run=} {num_runs=}')
 
-    timeout_run = 3.0 + 2.0 * duration_run
-    timeout_total = 5.0 + 2.0 * duration_total
+    timeout_run = 10.0 + 2.0 * duration_run
+    timeout_total = 20.0 + 2.0 * duration_total
 
     if progress is not None:
         prog, task = progress
@@ -289,6 +292,7 @@ def read_frames(
     adders = []
     frames = []
     timestamps = []
+    success = []
 
     t_decode = threading.Thread(
         target=_decode_responses,
@@ -304,6 +308,7 @@ def read_frames(
             'evt_stop': evt_stop,
             'num_runs': num_runs if config.num_frames > 0 else None,
             'read_adders': config.read_adders,
+            'success': success,
             'num_rows': numrows,
             'callback': callback,
             'progress': progress,
@@ -351,6 +356,8 @@ def read_frames(
     if t_decode.is_alive():
         print('[red] decode thread still running')
         raise RuntimeError()
+    if not success:
+        raise Exception('decode thread not successful')
     print('[yellow]decode thread joined')
 
     ############################################################################
