@@ -111,6 +111,7 @@ if __name__ == '__main__':
     no_readout: bool = args.no_readout
     no_laser: bool = args.no_laser
     no_motion: bool = args.no_motion
+    rows_str: str = 'all'
 
     import atexit
     import sys
@@ -143,6 +144,13 @@ if __name__ == '__main__':
     ############################################################################
 
     setup = hitpix.setups[setup_name]
+
+    # rows
+    if rows_str == 'all':
+        rows = np.array(np.arange(setup.pixel_rows, dtype=np.uint))
+    else:
+        rows = np.array(util.gridscan.parse_int_range(rows_str), dtype=np.uint)
+
 
     config_dict: dict[str, Any] = {
         'dac': setup.chip.dac_config_class.default(),
@@ -180,6 +188,7 @@ if __name__ == '__main__':
             setup_name=setup_name,
             pulse_ns=config_dict['pulse_ns'],
             readout_frequency=config_dict['frequency'],
+            rows=rows,
         )
 
     ############################################################################
