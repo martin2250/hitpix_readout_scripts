@@ -101,6 +101,9 @@ class Readout:
     ADDR_MMCM_CONFIG_2 = 0x22
     ADDR_RO_CLKS_DIV1 = 0x30
     ADDR_VERSION = 0xf0
+    ADDR_CTR_COMM_RX = 0xd0
+    ADDR_CTR_COMM_TX = 0xd1
+    ADDR_CTR_FAST_TX = 0xd2
 
     class ReadoutError(Exception):
         # error codes
@@ -274,23 +277,12 @@ class Readout:
             # check version
             version = self.get_version()
             # supported versions
-            if version.readout not in [0x015]:
+            if version.readout not in [0x015, 0x016]:
                 raise RuntimeError(
                     f'unsupported readout version 0x{version.readout:04X}')
             # sm prog
             if version.readout >= 0x0010:
                 self._sm_prog_bits = 14
-            # frequency
-            if version.readout < 0x0010:
-                self.frequency_mhz = 200
-                self.frequency_mhz_set = 200
-            elif version.readout == 0x0010:
-                self.frequency_mhz = 100
-                self.frequency_mhz_set = 100
-            else:
-                if math.isnan(self.frequency_mhz):
-                    self.frequency_mhz = 150.0
-                    self.frequency_mhz_set = 150.0
             # check statemachine running
             if not self.get_sm_status().idle:
                 print('init: state machine was still running, aborting')
@@ -349,6 +341,7 @@ class Readout:
         param frequency_mhz: bit rate when using lowest divider setting
         '''
         assert frequency_mhz <= 190.0
+        assert frequency_mhz >= 15.0
         from util.xilinx import pll7series
 
         # find values for 4x bitrate (output divider is doubled in FPGA)
@@ -390,4 +383,28 @@ class Readout:
             chip=(raw >> 24) & 0xff,
             adapter=(raw >> 16) & 0xff,
             readout=(raw >> 0) & 0xffff,
+        )
+
+    ############################################################################
+
+    @dataclass
+    class CommCounters:
+        comm_rx_packets: int
+        comm_rx_bytes: int
+        comm_tx_packets: int
+        comm_tx_bytes: int
+        fast_tx_packets: int
+        fast_tx_bytes: int
+
+    def get_comm_counters(self) -> CommCounters:
+        comm_rx = self.read_register(self.ADDR_CTR_COMM_RX)
+        comm_tx = self.read_register(self.ADDR_CTR_COMM_TX)
+        fast_tx = self.read_register(self.ADDR_CTR_FAST_TX)
+        return self.CommCounters(
+            comm_rx_packets = (comm_rx >> 16) & 0xffff,
+            comm_rx_bytes = comm_rx & 0xffff,
+            comm_tx_packets = (comm_tx >> 16) & 0xffff,
+            comm_tx_bytes = comm_tx & 0xffff,
+            fast_tx_packets = (fast_tx >> 16) & 0xffff,
+            fast_tx_bytes = fast_tx & 0xffff,
         )

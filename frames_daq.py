@@ -37,18 +37,20 @@ def main(
     import h5py
     import numpy as np
     from rich import print
-    from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn, TextColumn, BarColumn, TimeRemainingColumn
+    from rich.progress import (BarColumn, Progress, SpinnerColumn, TextColumn,
+                               TimeElapsedColumn, TimeRemainingColumn)
 
     import hitpix
     import hitpix.defaults
     import util.configuration
     import util.gridscan
     import util.helpers
-    from util.voltage_channel import open_voltage_channel
     from frames.daq import read_frames
     from frames.io import FrameConfig, save_frame_attrs
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
+    from readout.readout import SerialCobsComm
+    from util.voltage_channel import open_voltage_channel
 
     ############################################################################
 
@@ -59,7 +61,7 @@ def main(
         rows = np.array(np.arange(setup.pixel_rows, dtype=np.uint))
     else:
         rows = np.array(util.gridscan.parse_int_range(rows_str), dtype=np.uint)
-    
+
     # scan
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
@@ -111,7 +113,7 @@ def main(
     )
 
     time.sleep(0.05)
-    ro = HitPixReadout(serial_port_name, setup)
+    ro = HitPixReadout(SerialCobsComm(serial_port_name), setup)
     ro.initialize()
     atexit.register(lambda: print('[yellow]closing readout') or ro.close())
 
@@ -373,8 +375,10 @@ if __name__ == '__main__':
     )
 
     def parse_bool(s: str) -> bool:
-        if s.strip().lower() in ('1', 'true', 'yes', 'y', 't'): return True
-        if s.strip().lower() in ('0', 'false', 'no', 'n', 'f'): return False
+        if s.strip().lower() in ('1', 'true', 'yes', 'y', 't'):
+            return True
+        if s.strip().lower() in ('0', 'false', 'no', 'n', 'f'):
+            return False
         raise ValueError()
 
     parser.add_argument(

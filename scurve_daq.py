@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 from typing import Literal
 
+
 def __get_config_dict_ext() -> dict:
     return {
         'pulse_us': 2.5,
         'pause_us': 17.5,
         'simultaneous_injections': -2,
     }
+
 
 def main(
     output_file: str,
@@ -21,24 +23,25 @@ def main(
     vdd_driver: str = 'manual',
     vssa_driver: str = 'manual',
 ):
+    import atexit
     import copy
-    import time
     import sys
+    import time
     from pathlib import Path
 
     import h5py
     import numpy as np
     import tqdm
-    import atexit
 
+    import hitpix
     import hitpix.defaults
     import util.configuration
     import util.gridscan
     import util.helpers
     import util.voltage_channel
     from hitpix.readout import HitPixReadout
-    import hitpix
     from readout.fast_readout import FastReadout
+    from readout.readout import SerialCobsComm
     from scurve.daq import measure_scurves
     from scurve.io import SCurveConfig, save_scurve
 
@@ -77,7 +80,8 @@ def main(
         assert (setup.pixel_columns % abs(simultaneous_injections)) == 0
         # smaller than zero: input == injection steps
         if simultaneous_injections < 0:
-            simultaneous_injections = setup.pixel_columns // abs(simultaneous_injections)
+            simultaneous_injections = setup.pixel_columns // abs(
+                simultaneous_injections)
         # construct config
         return SCurveConfig(
             voltage_baseline=scan_dict['baseline'],
@@ -112,10 +116,9 @@ def main(
     atexit.register(fastreadout.close)
 
     time.sleep(0.05)
-    ro = HitPixReadout(serial_port_name, setup)
+    ro = HitPixReadout(SerialCobsComm(serial_port_name), setup)
     ro.initialize()
     atexit.register(ro.close)
-
 
     ############################################################################
 
@@ -142,7 +145,8 @@ def main(
             util.gridscan.save_scan(group_scan, scan_parameters)
             file.attrs['commandline'] = sys.argv
             # create nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
+            prog_scan = tqdm.tqdm(total=np.product(
+                scan_shape), dynamic_ncols=True)
             prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
             # scan over all possible combinations
             for idx in np.ndindex(*scan_shape):
@@ -172,7 +176,8 @@ def main(
         config = config_from_dict(config_dict_template)
         set_voltages(config)
 
-        res = measure_scurves(ro, fastreadout, config, tqdm.tqdm(dynamic_ncols=True))
+        res = measure_scurves(ro, fastreadout, config,
+                              tqdm.tqdm(dynamic_ncols=True))
 
         with h5py.File(path_output, 'w') as file:
             file.attrs['commandline'] = sys.argv
@@ -185,6 +190,7 @@ def main(
 
 if __name__ == '__main__':
     import argparse
+
     import hitpix.defaults
     parser = argparse.ArgumentParser()
 
@@ -271,7 +277,7 @@ if __name__ == '__main__':
             for name, value in hitpix.defaults.setup_dac_defaults[parsed_args.setup].items():
                 choices_set.append(f'dac.{name}={value}')
             return filter(lambda s: s.startswith(prefix), choices_set)
-        
+
         def scan_completer(prefix, parsed_args, **kwargs):
             return map(lambda s: s + ':', set_completer(prefix, parsed_args, **kwargs))
 
