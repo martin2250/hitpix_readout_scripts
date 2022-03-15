@@ -5,7 +5,7 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Iterable, Optional, Union
+from typing import Callable, Iterable, Optional, Union
 
 import serial
 from cobs import cobs
@@ -15,6 +15,69 @@ from . import Response, instructions
 
 InstructionsLike = Union[list[int], list[instructions.Instruction]]
 
+class PacketComm:
+    def __init__(self):
+        self.callback: Optional[Callable[[bytes], None]] = None
+    
+    def send_packet(self, packet: bytes) -> None:
+        raise NotImplementedError()
+    
+    def send_packets(self, packets: Iterable[bytes]) -> None:
+        for p in packets:
+            self.send_packet(p)
+    
+    def close(self) -> None:
+        pass
+
+class SerialCobsComm(PacketComm):
+    def __init__(self, serial_name: str):
+        super().__init__()
+        self.event_stop = threading.Event()
+        self._serial_port = serial.Serial(serial_name, 3_000_000)
+        self._serial_port.set_low_latency_mode(True)
+        self._thread_read_serial = threading.Thread(
+            target=self._read_serial,
+            daemon=True,
+            name='readout',
+        )
+        self._thread_read_serial.start()
+
+    def close(self) -> None:
+        self.event_stop.set()
+        self._thread_read_serial.join()
+        self._serial_port.close()
+
+    def _read_serial(self):
+        self._serial_port.reset_input_buffer()
+        buffer = bytearray()
+        while not self.event_stop.is_set():
+            data_new = self._serial_port.read_all()
+            if data_new is None:
+                time.sleep(0.001)
+                continue
+            buffer.extend(data_new)
+            # check if there are complete packets in the buffer
+            if not b'\x00' in buffer:
+                continue
+            index = buffer.rindex(b'\x00')
+            packets = buffer[:index].split(b'\x00')
+            del buffer[:index+1]
+            packets = [cobs.decode(packet) for packet in packets]
+            for packet in packets:
+                if self.callback is not None:
+                    self.callback(packet)
+    
+    def send_packet(self, packet: bytes) -> None:
+        self._serial_port.write(b'\x00' + cobs.encode(packet) + b'\x00')
+        self._serial_port.flushOutput()
+
+    def send_packets(self, packets: Iterable[bytes]) -> None:
+        data = bytearray(b'\x00')
+        for packet in packets:
+            data.extend(cobs.encode(packet))
+            data.append(0)
+        self._serial_port.write(data)
+        self._serial_port.flushOutput()
 
 class Readout:
     # commands
@@ -56,15 +119,11 @@ class Readout:
             code_str = self.errors.get(code, f'0x{code:02X}')
             super().__init__(f'readout error code {code_str}')
 
-    def __init__(self, serial_name: str, timeout: float = 1.5) -> None:
-        self._serial_port = serial.Serial(serial_name, 3_000_000)
+    def __init__(self, comm: PacketComm, timeout: float = 1.5) -> None:
+        self.comm = comm
+        self.comm.callback = self.receive_callback
         self._response_queue: queue.Queue[Response] = queue.Queue()
-        self.event_stop = threading.Event()
-        self._thread_read_serial = threading.Thread(
-            target=self._read_serial, daemon=True, name='readout')
-        self._thread_read_serial.start()
         self._timeout = timeout
-        self._serial_port.set_low_latency_mode(True)
         self._sm_error_count = 0
         self._sm_prog_bits = 12
         self.frequency_mhz = float('nan')
@@ -72,35 +131,17 @@ class Readout:
         self.debug_responses = False
 
     def close(self) -> None:
-        self.event_stop.set()
-        self._thread_read_serial.join()
-        self._serial_port.close()
-
-    def _read_serial(self):
-        self._serial_port.reset_input_buffer()
-        buffer = bytearray()
-        while not self.event_stop.is_set():
-            data_new = self._serial_port.read_all()
-            if data_new is None:
-                time.sleep(0.001)
-                continue
-            buffer.extend(data_new)
-            # check if there are complete packets in the buffer
-            if not b'\x00' in buffer:
-                continue
-            index = buffer.rindex(b'\x00')
-            packets = buffer[:index].split(b'\x00')
-            del buffer[:index+1]
-            packets = [cobs.decode(packet) for packet in packets]
-            for packet in packets:
-                try:
-                    response = self._response_queue.get(False)
-                    if self.debug_responses:
-                        print(response.name, '>>>', packet[:8].hex())
-                    response.data = packet
-                    response.event.set()
-                except queue.Empty:
-                    print('readout received unexpected response', packet)
+        self.comm.close()
+    
+    def receive_callback(self, packet: bytes) -> None:
+        try:
+            response = self._response_queue.get(False)
+            if self.debug_responses:
+                print(response.name, '>>>', packet[:8].hex())
+            response.data = packet
+            response.event.set()
+        except queue.Empty:
+            print('readout received unexpected response', packet)
 
     def _expect_response(self, name: Optional[str] = None) -> Response:
         if (not name) and self.debug_responses:
@@ -123,29 +164,18 @@ class Readout:
         self._response_queue.put(response)
         return response
 
-    def send_packet(self, packet: bytes) -> None:
-        self._serial_port.write(b'\x00' + cobs.encode(packet) + b'\x00')
-        self._serial_port.flushOutput()
-
-    def send_packets(self, packets: Iterable[bytes]) -> None:
-        data = bytearray(b'\x00')
-        for packet in packets:
-            data.extend(cobs.encode(packet))
-            data.append(0)
-        self._serial_port.write(data)
-        self._serial_port.flushOutput()
-
     def write_register(self, address: int, value: int) -> None:
         assert address in range(256)
         assert value in range(1 << 32)
-        self._expect_response()
-        self.send_packet(
+        resp = self._expect_response()
+        self.comm.send_packet(
             bytes([self.CMD_REGISTER_WRITE, address]) + value.to_bytes(4, 'little'))
+        assert resp.event.wait()
 
     def read_register(self, address: int) -> int:
         assert address in range(256)
         response = self._expect_response()
-        self.send_packet(bytes([self.CMD_REGISTER_READ, address]))
+        self.comm.send_packet(bytes([self.CMD_REGISTER_READ, address]))
         if not response.event.wait(self._timeout):
             raise TimeoutError('no response received')
         assert response.data is not None
@@ -159,8 +189,9 @@ class Readout:
         ]
         data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
-        self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_EXEC]) + data)
+        resp = self._expect_response()
+        self.comm.send_packet(bytes([self.CMD_SM_EXEC]) + data)
+        assert resp.event.wait()
 
     def sm_write(self, assembly: InstructionsLike, offset: int = 0) -> int:
         '''returns offset of next instruction'''
@@ -172,9 +203,10 @@ class Readout:
                                                 self._sm_prog_bits), 'sm prog too large'
         data = b''.join(code.to_bytes(4, 'little') for code in assembly_int)
         # write to board
-        self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_WRITE]) +
+        resp = self._expect_response()
+        self.comm.send_packet(bytes([self.CMD_SM_WRITE]) +
                          offset.to_bytes(2, 'little') + data)
+        assert resp.event.wait()
         return offset + len(assembly_int)
 
     def sm_start(self, runs: int = 1, offset: int = 0, packets: int = 1) -> None:
@@ -188,26 +220,30 @@ class Readout:
         assert runs in range(0x10000)
         assert offset in range(0x10000)
         assert packets in range(0x10000)
-        self._expect_response()
-        self.send_packet(struct.pack(
+        resp = self._expect_response()
+        self.comm.send_packet(struct.pack(
             '<BHHH',
             self.CMD_SM_START,
             offset,
             runs,
             (packets - 1) & 0xffff,
         ))
+        assert resp.event.wait()
 
     def sm_abort(self) -> None:
-        self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_ABORT]))
+        resp = self._expect_response()
+        self.comm.send_packet(bytes([self.CMD_SM_ABORT]))
+        assert resp.event.wait()
 
     def sm_soft_abort(self) -> None:
-        self._expect_response()
-        self.send_packet(bytes([self.CMD_SM_SOFT_ABORT]))
+        resp = self._expect_response()
+        self.comm.send_packet(bytes([self.CMD_SM_SOFT_ABORT]))
+        assert resp.event.wait()
 
     def fast_tx_flush(self) -> None:
-        self._expect_response()
-        self.send_packet(bytes([self.CMD_FAST_TX_FLUSH]))
+        resp = self._expect_response()
+        self.comm.send_packet(bytes([self.CMD_FAST_TX_FLUSH]))
+        assert resp.event.wait()
 
     def get_synchronization(self) -> TimeSync:
         sync_time = time.time()
@@ -221,8 +257,9 @@ class Readout:
                             (on_cycles - 1) | ((off_cycles - 1) << 16))
 
     def _write_function_card_raw(self, data: bytes) -> None:
-        self._expect_response()
-        self.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
+        resp = self._expect_response()
+        self.comm.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
+        assert resp.event.wait()
 
     def set_readout_clock_sequence(self, clk1: int, clk2: int) -> None:
         assert clk1 in range(1 << 12)
@@ -276,9 +313,10 @@ class Readout:
             bytes([self.CMD_FUNCTION_CARD]) + data + \
             b'\xff',  # write data and set CS high
         ]
-        for _ in packets:
-            self._expect_response()
-        self.send_packets(packets)
+        resp = [self._expect_response() for _ in packets]
+        self.comm.send_packets(packets)
+        for r in resp:
+            assert r.event.wait()
 
     @dataclass
     class SmStatus:

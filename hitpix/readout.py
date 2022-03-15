@@ -1,5 +1,5 @@
 from enum import IntEnum
-from readout.readout import Readout
+from readout.readout import Readout, SerialCobsComm
 from readout.dac_card import DacCard
 from . import HitPixSetup
 
@@ -20,8 +20,8 @@ class HitPix1Pins(IntEnum):
     ro_inv_ck   = 31
 
 class HitPixReadout(Readout):
-    def __init__(self, serial_name: str, setup: HitPixSetup, timeout: float = 0.5) -> None:
-        super().__init__(serial_name, timeout=timeout)
+    def __init__(self, comm: SerialCobsComm, setup: HitPixSetup, timeout: float = 0.5) -> None:
+        super().__init__(comm, timeout=timeout)
         self.setup = setup
         self.dac_cards = {}
 
