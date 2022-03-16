@@ -20,6 +20,12 @@ parser.add_argument(
     help='plot output file',
 )
 
+parser.add_argument(
+    '--ymax',
+    type=float, default=-1,
+    help='maximum y value (microamps)',
+)
+
 try:
     import argcomplete
     from argcomplete.completers import FilesCompleter
@@ -40,6 +46,10 @@ for path_in in args.input_file:
 plt.legend()
 plt.xlabel('Depletion Voltage (V)')
 plt.ylabel('Leakage Current (µA)')
+
+if args.ymax != 0:
+    plt.ylim(bottom=-abs(args.ymax))
+
 
 if args.output is not None:
     plt.savefig(args.output, dpi=300, transparent=True)
