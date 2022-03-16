@@ -269,6 +269,11 @@ class Readout:
         assert clk2 in range(1 << 12)
         self.write_register(self.ADDR_RO_CLKS_DIV1, (clk2 << 16) | clk1)
 
+    def get_readout_clock_sequence(self) -> tuple[int, int]:
+        data = self.read_register(self.ADDR_RO_CLKS_DIV1)
+        mask = (1 << 12) - 1
+        return data & mask, (data >> 16) & mask
+
     def initialize(self) -> None:
         try:
             # set all enable pins high
@@ -356,7 +361,7 @@ class Readout:
         self._expect_response('dummy')
         self._expect_response('dummy')
         # wait for hardware
-        time.sleep(0.8)
+        time.sleep(0.02)
         try:
             while True:
                 self._response_queue.get_nowait()

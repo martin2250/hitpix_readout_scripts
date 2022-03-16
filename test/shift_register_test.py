@@ -18,6 +18,7 @@ from readout.sm_prog import prog_shift_dense, prog_sleep
 import util.gridscan
 import util.voltage_channel
 from hitpix.readout import HitPixReadout
+from readout.readout import SerialCobsComm
 import hitpix
 import hitpix.defaults
 from readout.fast_readout import FastReadout
@@ -25,33 +26,44 @@ from readout.instructions import Finish, Reset, SetCfg, SetPins, ShiftOut, Sleep
 
 ############################################################################
 
-cfg_setup = 'hitpix1'
-# cfg_setup = 'hitpix2-1x1'
+# cfg_setup = 'hitpix1'
+cfg_setup = 'hitpix2-1x1'
 
+cfg_div1_clk1 = hitpix.setups[cfg_setup].readout_div1_clk1
+cfg_div1_clk2 = hitpix.setups[cfg_setup].readout_div1_clk2
 
 cfg_clkdiv_write = 0
 # cfg_clkdiv_write = 1
 # cfg_clkdiv_write = 2
 # cfg_clkdiv_write = 3
 
-cfg_clkdiv_read = None
-# cfg_clkdiv_read = 3
+# cfg_clkdiv_read = None
+cfg_clkdiv_read = 3
 
-cfg_shift_latencies = list(range(0, 47))
+cfg_shift_latencies = list(range(4, 27))
 
 
-cfg_select = 'ro'
-# cfg_select = 'dac'
+# cfg_select = 'ro'
+cfg_select = 'dac'
 
+# # hitpix 1 default
+# cfg_div1_dtin=0b111111000000
+# cfg_div1_clk1=0b001110000000
+# cfg_div1_clk2=0b000001110000
+
+# # hitpix 2 default
+# cfg_div1_dtin=0b111111000000
+# cfg_div1_clk1=0b001100000000
+# cfg_div1_clk2=0b000001100000
 
 # cfg_voltage = 1.85
 cfg_voltage = None
 
 
-# cfg_num_rounds = 10
-cfg_num_rounds = 20
+cfg_num_rounds = 10
+# cfg_num_rounds = 20
 
-cfg_freq_range = np.linspace(50, 180, 15)
+cfg_freq_range = np.linspace(25, 190, 60)
 
 # checks
 assert cfg_clkdiv_write in range(4)
@@ -67,7 +79,7 @@ fastreadout = FastReadout(board.fastreadout_serial_number)
 atexit.register(fastreadout.close)
 time.sleep(0.05)
 
-ro = HitPixReadout(serial_port_name, hitpix.setups[cfg_setup])
+ro = HitPixReadout(SerialCobsComm(serial_port_name), hitpix.setups[cfg_setup])
 ro.initialize()
 atexit.register(ro.close)
 
@@ -202,7 +214,7 @@ for f in cfg_freq_range:
 
 date = datetime.now().date().isoformat()
 ro_version = ro.get_version()
-filename = f'{date}-{cfg_setup}-{cfg_select}-v{ro_version.readout:03x}-div{cfg_clkdiv_write}-latency.dat'
+filename = f'{date}-{cfg_setup}-{cfg_select}-v{ro_version.readout:03x}-div{cfg_clkdiv_write}-cks-{cfg_div1_clk1}-{cfg_div1_clk2}-latency.dat'
 
 with open(filename, 'w') as f_out:
     print(f'# latency scan', file=f_out)
@@ -213,6 +225,8 @@ with open(filename, 'w') as f_out:
     print(f'# {cfg_clkdiv_read=}', file=f_out)
     print(f'# {cfg_select=}', file=f_out)
     print(f'# {ro_version=}', file=f_out)
+    print(f'# {cfg_div1_clk1=:12b}', file=f_out)
+    print(f'# {cfg_div1_clk2=:12b}', file=f_out)
     print(f'# latencies\t' + '\t'.join(str(int(l))
           for l in cfg_shift_latencies), file=f_out)
     print(f'# frequency (MHz)\t' +
@@ -220,6 +234,8 @@ with open(filename, 'w') as f_out:
 
     for freq in frequencies:
         ro.set_system_clock(freq)
+
+        ro.set_readout_clock_sequence(cfg_div1_clk1, cfg_div1_clk2)
 
         test_shift_register(
             ro=ro,
