@@ -15,7 +15,7 @@ with open(sys.argv[1]) as f_in:
     latencies = list(int(s.strip()) for s in lat_str)
     frequencies, *errors = np.loadtxt(f_in, unpack=True)
 
-part = slice(4, None)
+part = slice(None)
 latencies = np.array(latencies[part])
 errors = np.array(errors[part])
 
@@ -38,10 +38,10 @@ plt.pcolormesh(
 )
 plt.suptitle('Error Rate vs Data Rate')
 plt.xlabel('Readout Bitrate (Mbit/s)')
-plt.ylabel('Sampling Latency (quarter bits)')
+plt.ylabel('Sampling Latency (1/6 bits)')
 plt.tight_layout()
-plt.savefig('hitpix1.png')
-# plt.show()
+plt.savefig('/tmp/hitpix1.png')
+plt.show()
 
 # for latency, error in zip(latencies[part], errors[part]):
 #     plt.plot(frequencies, error + max_error*latency, label=f'{latency}')

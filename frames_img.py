@@ -61,6 +61,10 @@ parser.add_argument(
     '--label',
 )
 
+parser.add_argument(
+    '--title',
+)
+
 
 try:
     import argcomplete
@@ -87,6 +91,7 @@ logx: bool = args.logx
 logy: bool = args.logy
 plot_range: Optional[float] = args.plot_range
 label: Optional[str] = args.label
+title: Optional[str] = args.title
 
 ################################################################################
 
@@ -121,7 +126,7 @@ with h5py.File(args.input_file) as file:
     # load data
     group_frames = file[group_name]
     assert isinstance(group_frames, h5py.Group)
-    config, hit_frames, _ = frames.io.load_frames(group_frames)
+    config, hit_frames, _, _ = frames.io.load_frames(group_frames)
 
 hit_frames = np.sum(hit_frames, axis=0)
 hit_frames = hit_frames / (config.frame_length_us * config.num_frames * 1e-6)
@@ -145,6 +150,14 @@ if label:
     # label = label.format(**fmt_dict)
     label = str(eval(f'f"{label}"', fmt_dict))
     label = label.encode('latin-1','backslashreplace').decode('unicode_escape')
+
+if title:
+    fmt_dict = dataclasses.asdict(config)
+    del fmt_dict['dac_cfg']
+    fmt_dict['dac'] = config.dac_cfg
+    # label = label.format(**fmt_dict)
+    title = str(eval(f'f"{title}"', fmt_dict))
+    title = title.encode('latin-1','backslashreplace').decode('unicode_escape')
 
 ################################################################################
 
@@ -174,6 +187,8 @@ if plot_type == 'hitmap':
             fontsize=14, ha="left", va='top',
             transform=ax.transAxes,
         )
+    if title:
+        fig.suptitle(title)
 
     fig.colorbar(im_hits, ax=ax)
     fig.tight_layout()

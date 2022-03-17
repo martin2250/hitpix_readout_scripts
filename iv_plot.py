@@ -22,7 +22,7 @@ parser.add_argument(
 
 parser.add_argument(
     '--ymax',
-    type=float, default=-1,
+    type=float, default=0,
     help='maximum y value (microamps)',
 )
 
@@ -42,11 +42,14 @@ for path_in in args.input_file:
     style = '--' if ('1.1' in path_in or '5e14' in path_in) else '-'
     path_in = Path(path_in)
     U, I = np.loadtxt(path_in, unpack=True)
-    plt.plot(U, I * 1e6, style, label=path_in.name.removesuffix('-iv.txt'))
+    label = path_in.name.removesuffix('.txt')
+    plt.plot(U, I * 1e6, style, label=label)
 plt.legend()
 plt.xlabel('Depletion Voltage (V)')
 plt.ylabel('Leakage Current (µA)')
+plt.tight_layout()
 
+plt.ylim(top=0.5)
 if args.ymax != 0:
     plt.ylim(bottom=-abs(args.ymax))
 
