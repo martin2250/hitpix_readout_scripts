@@ -50,6 +50,7 @@ def main(
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
     from readout.readout import SerialCobsComm
+    from util.live_view.frames import LiveViewFrames
     from util.voltage_channel import open_voltage_channel
 
     ############################################################################
@@ -154,159 +155,89 @@ def main(
 
     ############################################################################
 
-    with Progress(
+    callback = None
+    if live_fps:
+        if read_adders:
+            pass
+        else:
+            view = LiveViewFrames((len(rows), setup.pixel_columns))
+            def callback_frames(hits_new: np.ndarray):
+                view.show_frame(np.sum(hits_new, axis=0).astype(np.int64), 1.0)
+            callback = callback_frames
+
+    ############################################################################
+
+    progress = Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
+        TextColumn('[progress.description]{task.description}'),
         BarColumn(),
-        TextColumn(
-            "[progress.percentage]{task.completed:>6.0f}/{task.total:0.0f}"),
+        TextColumn('[progress.percentage]{task.completed:>6.0f}/{task.total:0.0f}'),
         TimeRemainingColumn(),
         TimeElapsedColumn(),
         refresh_per_second=5.0,
-    ) as progress:
+    )
+
+    file = h5py.File(path_output, 'a')
+
+    with file, progress:
+        # save exact command line
+        file.attrs['commandline'] = sys.argv
+        # save scan parameters, if there are any
         if scan_parameters:
-            # do not allow infinite runtime in parameter scans (for now)
-            assert num_frames > 0
-            with h5py.File(path_output, 'a') as file:
-                # save scan parameters first
-                group_scan = file.require_group('scan')
-                util.gridscan.save_scan(group_scan, scan_parameters)
-                file.attrs['commandline'] = sys.argv
-                # nested progress bars
-                task_scan = progress.add_task(
-                    'Scan', total=np.product(scan_shape))
-                # scan over all possible combinations
-                for idx in np.ndindex(*scan_shape):
-                    if evt_stop.is_set():
-                        break
-                    task_frames = progress.add_task('Frames', start=False)
-                    # check if this measurement is already present in file
-                    group_name = 'frames_' + '_'.join(str(i) for i in idx)
-                    if group_name in file:
-                        # skip
-                        progress.update(task_scan, advance=1)
-                        continue
-                    # apply scan and set
-                    config_dict = copy.deepcopy(config_dict_template)
-                    util.gridscan.apply_scan(config_dict, scan_parameters, idx)
-                    util.gridscan.apply_set(config_dict, args_set)
-                    # extract all values
-                    config = config_from_dict(config_dict)
-                    set_voltages(config)
-                    assert not sums_only
-                    for _ in range(3):
-                        try:
-                            # store measurement
-                            group = file.create_group(group_name)
-                            save_frame_attrs(group, config)
-                            # perform measurement
-                            ro.sm_abort()
-                            read_frames(
-                                ro=ro,
-                                fastreadout=fastreadout,
-                                config=config,
-                                progress=(progress, task_frames),
-                                callback=None,
-                                evt_stop=evt_stop,
-                                h5group=group
-                            )
-                            break
-                        except Exception as e:
-                            print(f'[red]exception: {e}, retrying')
-                            del file[group_name]
-                    else:
-                        raise Exception('too many retries')
-
-                    progress.remove_task(task_frames)
-                    progress.update(task_scan, advance=1)
-                    # # sums -> sum up all frames
-                    # if sums_only:
-                    #     frames = frames.sum(axis=0, keepdims=True)
-                    #     times = times[:1]
-        else:
-            util.gridscan.apply_set(config_dict_template, args_set)
-            config = config_from_dict(config_dict_template)
+            group_scan = file.require_group('scan')
+            util.gridscan.save_scan(group_scan, scan_parameters)
+        # progress bars
+        task_frames = progress.add_task('Frames', start=False)
+        task_scan = progress.add_task(
+            'Scan',
+            total=np.product(scan_shape),
+            visible=bool(scan_parameters),
+        )
+        # scan over all possible combinations
+        for idx in np.ndindex(*scan_shape):
+            # stop after ctrl-c
+            if evt_stop.is_set():
+                break
+            # progress bars
+            progress.reset(task_frames)
+            progress.update(task_scan, advance=1)
+            # skip if this measurement is already present in file
+            group_name = 'frames' + ''.join(f'_{i}' for i in idx)
+            if group_name in file:
+                continue
+            # apply scan and set
+            config_dict = copy.deepcopy(config_dict_template)
+            if scan_parameters:
+                util.gridscan.apply_scan(config_dict, scan_parameters, idx)
+            util.gridscan.apply_set(config_dict, args_set)
+            # extract all values
+            config = config_from_dict(config_dict)
             set_voltages(config)
-
-            callback = None
-            if live_fps is not None:
-                assert live_fps < 30.0 and live_fps > 0.01
-                from multiprocessing import Process, Queue
-                from queue import Empty
-
-                q_hits = Queue()
-
-                def plot_callback(hits_new):
-                    q_hits.put(np.sum(hits_new, axis=0).astype(np.int64))
-                callback = plot_callback
-
-                frames_per_run = 1e6 / (live_fps * config.frame_length_us)
-                config.frames_per_run = max(1, min(250, int(frames_per_run)))
-                plot_frame_us = config.frames_per_run * config.frame_length_us
-                # matplotlib uses int typing but accepts floats
-                plot_pause = cast(int, 0.25/live_fps)
-
-                def format_time(us: float) -> str:
-                    if us < 1000.0:
-                        return f'{us:0.1f} us'
-                    us /= 1000
-                    if us < 1000.0:
-                        return f'{us:0.1f} ms'
-                    us /= 1000
-                    return f'{us:0.1f} s'
-
-                def plot_process():
-                    hits = np.zeros(
-                        (setup.pixel_rows, setup.pixel_columns), np.int64)
-
-                    import matplotlib.pyplot as plt
-                    from matplotlib.colors import LogNorm
-                    _, (ax_frame, ax_total) = cast(Any, plt.subplots(1, 2))
-                    image_frame = ax_frame.imshow(hits)
-                    image_total = ax_total.imshow(hits)
-                    plt.colorbar(image_frame, ax=ax_frame)
-                    plt.colorbar(image_total, ax=ax_total)
-                    plot_total_us = 0
-                    ax_frame.set_title(f'hits / {format_time(plot_frame_us)}')
-
-                    plt.ion()
-                    plt.show()
-
-                    while True:
-                        plt.pause(plot_pause)
-                        try:
-                            hits_new = q_hits.get_nowait()
-                            image_frame.set_data(hits_new + 1)
-                            image_frame.set_norm(
-                                LogNorm(vmin=1, vmax=np.max(hits_new)))
-                            hits += hits_new
-                            plot_total_us += plot_frame_us
-                            image_total.set_data(hits)
-                            image_total.set_clim(0, np.max(hits))
-                            ax_total.set_title(
-                                f'hits / {format_time(plot_total_us)}')
-                        except Empty:
-                            pass
-                Process(
-                    target=plot_process,
-                    daemon=True,
-                ).start()
-
-            with h5py.File(path_output, 'w') as file:
-                file.attrs['commandline'] = sys.argv
-                group = file.create_group('frames')
-                save_frame_attrs(group, config)
-                assert not sums_only
-                task_frames = progress.add_task('Frames', start=False)
-                read_frames(
-                    ro=ro,
-                    fastreadout=fastreadout,
-                    config=config,
-                    progress=(progress, task_frames),
-                    callback=callback,
-                    evt_stop=evt_stop,
-                    h5group=group,
-                )
+            assert not sums_only
+            # repeat measurement in case of exceptions
+            for _ in range(3):
+                try:
+                    # store measurement
+                    group = file.create_group(group_name)
+                    save_frame_attrs(group, config)
+                    # perform measurement
+                    ro.sm_abort()
+                    read_frames(
+                        ro=ro,
+                        fastreadout=fastreadout,
+                        config=config,
+                        progress=(progress, task_frames),
+                        callback=callback,
+                        evt_stop=evt_stop,
+                        h5group=group
+                    )
+                    break
+                except Exception as e:
+                    print(f'[red]exception: {e}, retrying')
+                    if group_name in file:
+                        del file[group_name]
+            else:
+                raise Exception('too many retries')
     size_mb = path_output.stat().st_size / (1 << 20)
     print(f'[green]total file size: {size_mb:0.2f} MB')
 
@@ -432,9 +363,6 @@ if __name__ == '__main__':
         pass
 
     args = parser.parse_args()
-
-    # live mode is not available during parameter scans
-    assert not (args.live_fps and args.scan)
 
     main(
         output_file=args.output_file,

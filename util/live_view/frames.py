@@ -23,6 +23,9 @@ class LiveViewFrames:
             daemon=True,
         )
         self.proc_plot.start()
+
+    def __del__(self) -> None:
+        print('del LiveViewFrames')
     
     @property
     def closed(self) -> bool:
@@ -83,4 +86,7 @@ class LiveViewFrames:
             ax_total.set_title(f'hits / {format_time(plot_total_us)}')
 
     def show_frame(self, frame: np.ndarray, frame_us: float):
-        self.q_hits.put((frame, frame_us))
+        try:
+            self.q_hits.put((frame, frame_us))
+        except BrokenPipeError:
+            pass
