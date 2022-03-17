@@ -138,52 +138,36 @@ def main(
 
     ############################################################################
 
-    if scan_parameters:
-        with h5py.File(path_output, 'a') as file:
-            # save scan parameters first
+    with h5py.File(path_output, 'a') as file:
+        file.attrs['commandline'] = sys.argv
+        # save scan parameters first
+        if scan_parameters:
             group_scan = file.require_group('scan')
             util.gridscan.save_scan(group_scan, scan_parameters)
-            file.attrs['commandline'] = sys.argv
-            # create nested progress bars
-            prog_scan = tqdm.tqdm(total=np.product(
-                scan_shape), dynamic_ncols=True)
-            prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
-            # scan over all possible combinations
-            for idx in np.ndindex(*scan_shape):
-                # check if this measurement is already present in file
-                group_name = 'scurve_' + '_'.join(str(i) for i in idx)
-                if group_name in file:
-                    # skip
-                    prog_scan.update()
-                    continue
-                # apply scan and set
-                config_dict = copy.deepcopy(config_dict_template)
+        # create nested progress bars
+        prog_scan = tqdm.tqdm(total=np.product(scan_shape), dynamic_ncols=True)
+        prog_meas = tqdm.tqdm(leave=None, dynamic_ncols=True)
+        # scan over all possible combinations
+        for idx in np.ndindex(*scan_shape):
+            prog_scan.update()
+            # skip if this measurement is already present in file
+            group_name = 'scurve' + ''.join(f'_{i}' for i in idx)
+            if group_name in file:
+                continue
+            # apply scan and set
+            config_dict = copy.deepcopy(config_dict_template)
+            if scan_parameters:
                 util.gridscan.apply_scan(config_dict, scan_parameters, idx)
-                util.gridscan.apply_set(config_dict, args_set)
-                # extract all values
-                config = config_from_dict(config_dict)
-                set_voltages(config)
-                # perform measurement
-                prog_meas.reset()
-                res = measure_scurves(ro, fastreadout, config, prog_meas)
-                # store measurement
-                group = file.create_group(group_name)
-                save_scurve(group, config, *res)
-                prog_scan.update()
-
-    else:
-        util.gridscan.apply_set(config_dict_template, args_set)
-        config = config_from_dict(config_dict_template)
-        set_voltages(config)
-
-        res = measure_scurves(ro, fastreadout, config,
-                              tqdm.tqdm(dynamic_ncols=True))
-
-        with h5py.File(path_output, 'w') as file:
-            file.attrs['commandline'] = sys.argv
-            group = file.create_group('scurve')
+            util.gridscan.apply_set(config_dict, args_set)
+            # extract all values
+            config = config_from_dict(config_dict)
+            set_voltages(config)
+            # perform measurement
+            prog_meas.reset()
+            res = measure_scurves(ro, fastreadout, config, prog_meas)
+            # store measurement
+            group = file.create_group(group_name)
             save_scurve(group, config, *res)
-
 
 ################################################################################
 
