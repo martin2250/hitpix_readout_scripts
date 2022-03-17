@@ -18,7 +18,16 @@ from util.time_sync import TimeSync
 from .io import FrameConfig
 from .sm_prog import prog_read_adders, prog_read_frames
 
+def print_exceptions(f):
+    def g(*args, **kwargs):
+        try:
+            f(*args, **kwargs)
+        except Exception as e:
+            print(e)
+            raise e
+    return g
 
+@print_exceptions
 def _decode_responses(
     response_queue: queue.Queue[bytes],
     frames: list[np.ndarray],
@@ -39,6 +48,7 @@ def _decode_responses(
                            Optional[h5py.Dataset], h5py.Dataset]] = None,
 ):
     ctr_max = 1 << setup.chip.bits_counter
+    adder_max = ctr_max * setup.chip.rows
     hits_last = None
     # total number of frames received so far
     frames_total = 0
@@ -51,7 +61,7 @@ def _decode_responses(
         run_iter = iter(int, 1)
     else:
         run_iter = range(num_runs)
-
+    
     # data processing loop
     for _ in run_iter:
         try:
@@ -106,9 +116,16 @@ def _decode_responses(
 
         # counter counts down
         block_frames = (ctr_max - block_frames) % ctr_max
+        block_adders = (adder_max - block_adders) % adder_max
 
         if callback:
-            callback(block_frames)
+            try:
+                if read_adders:
+                    callback(block_adders)
+                else:
+                    callback(block_frames)
+            except Exception as e:
+                print(e)
 
         if h5data is not None:
             dset_frames, dset_adders, dset_times = h5data
@@ -320,6 +337,7 @@ def read_frames(
     ############################################################################
     # run init program
     ro.sm_start(offset=offset_init)
+    ro.wait_sm_idle(3.0)
     # start measurement
     ro.sm_start(
         frames_per_run,

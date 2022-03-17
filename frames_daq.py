@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from typing import Any, Literal, Optional, cast
+
+from typing import Any, Literal, Optional
 
 
 def __get_config_dict_ext() -> dict:
@@ -29,6 +30,7 @@ def main(
 ):
     import atexit
     import copy
+    import math
     import signal
     import sys
     import threading
@@ -51,7 +53,7 @@ def main(
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
     from readout.readout import SerialCobsComm
-    from util.live_view.frames import LiveViewFrames
+    from util.live_view.frames import LiveViewAdders, LiveViewFrames
     from util.voltage_channel import open_voltage_channel
 
     ############################################################################
@@ -60,20 +62,27 @@ def main(
 
     # rows
     if rows_str == 'all':
-        rows = np.array(np.arange(setup.pixel_rows, dtype=np.uint))
+        if read_adders:
+            rows = np.array([], dtype=np.uint)
+        else:
+            rows = np.array(np.arange(setup.pixel_rows, dtype=np.uint))
+
     else:
+        assert not read_adders
         rows = np.array(util.gridscan.parse_int_range(rows_str), dtype=np.uint)
 
     # scan
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)
 
-    config_dict_template = {
+    config_dict_template: dict[str, Any] = {
         'dac': setup.chip.dac_config_class.default(),
     }
     config_dict_template.update(**hitpix.defaults.settings_default)
     config_dict_template.update(**__get_config_dict_ext())
 
     ############################################################################
+
+    frames_per_run = 1 << 63
 
     def config_from_dict(config_dict: dict) -> FrameConfig:
         # reading adders only makes sense when resetting counters
@@ -96,6 +105,7 @@ def main(
             reset_counters=bool(config_dict['reset_counters']),
             pulse_ns=config_dict['pulse_ns'],
             setup_name=setup_name,
+            frames_per_run=frames_per_run,
         )
 
     ############################################################################
@@ -165,12 +175,18 @@ def main(
     callback = None
     if live_fps:
         if read_adders:
-            pass
+            view = LiveViewAdders(setup.pixel_columns, 100)
         else:
             view = LiveViewFrames((len(rows), setup.pixel_columns))
-            def callback_frames(hits_new: np.ndarray):
-                view.show_frame(np.sum(hits_new, axis=0).astype(np.int64), 1.0)
-            callback = callback_frames
+
+        def callback_frames(hits_new: np.ndarray):
+            view.show_frame(np.sum(hits_new, axis=0).astype(np.int64), 1.0)
+        callback = callback_frames
+        # limit number of frames per run
+        config_dict = copy.deepcopy(config_dict_template)
+        util.gridscan.apply_set(config_dict, args_set)
+        frame_us = config_dict['frame_us'] + config_dict['pause_us']
+        frames_per_run = math.ceil(1. / (live_fps * frame_us * 1e-6))
 
     ############################################################################
 
@@ -178,7 +194,8 @@ def main(
         SpinnerColumn(),
         TextColumn('[progress.description]{task.description}'),
         BarColumn(),
-        TextColumn('[progress.percentage]{task.completed:>6.0f}/{task.total:0.0f}'),
+        TextColumn(
+            '[progress.percentage]{task.completed:>6.0f}/{task.total:0.0f}'),
         TimeRemainingColumn(),
         TimeElapsedColumn(),
         refresh_per_second=5.0,
@@ -222,7 +239,7 @@ def main(
             set_voltages(config)
             assert not sums_only
             # repeat measurement in case of exceptions
-            for _ in range(3):
+            while not evt_stop.is_set():
                 try:
                     # store measurement
                     group = file.create_group(group_name)
@@ -240,7 +257,9 @@ def main(
                     )
                     break
                 except Exception as e:
+                    print(e)
                     print(f'[red]exception: {e}, retrying')
+                    raise e
                     if group_name in file:
                         del file[group_name]
             else:
@@ -328,7 +347,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--read_adders',
-        type=parse_bool, default=False,
+        action='store_true',
         help='only read adders instead of full matrix',
     )
 

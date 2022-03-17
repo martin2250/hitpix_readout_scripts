@@ -53,7 +53,7 @@ class FastReadout:
         n_tot = 0
         t_start = time.perf_counter()
         while not self.event_stop.is_set():
-            data_new = self.ftdi.read(3968 * 512) # see AN232B-03 Optimising D2XX Data Throughput
+            data_new = self.ftdi.read(3968 * 4) # see AN232B-03 Optimising D2XX Data Throughput
             if not isinstance(data_new, bytes) or not data_new:
                 time.sleep(0.0002)
                 continue

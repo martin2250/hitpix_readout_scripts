@@ -192,13 +192,16 @@ class Reset(Instruction):
 
 @dataclass
 class GetTime(Instruction):
-    '''end of program'''
+    '''shift out microsecond counter'''
 
     def to_binary(self) -> int:
         return 0b00010101 << 24
 
     def count_cycles(self, cfg: 'SetCfg') -> int:
         return 1
+
+    def __repr__(self) -> str:
+        return 'GetTime()'
 
 @dataclass
 class Finish(Instruction):
@@ -207,9 +210,11 @@ class Finish(Instruction):
     def to_binary(self) -> int:
         return 0
 
-
     def count_cycles(self, cfg: 'SetCfg') -> int:
         return 1
+    
+    def __repr__(self) -> str:
+        return 'Finish()'
         
 @dataclass
 class Wait(Instruction):

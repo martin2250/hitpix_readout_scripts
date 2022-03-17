@@ -30,7 +30,7 @@ class FrameConfig:
     setup_name: str
     readout_frequency: float
     pulse_ns: float
-    frames_per_run: int = 1 << 16
+    frames_per_run: int = 1 << 63
 
     def asdict(self) -> dict:
         d = dataclasses.asdict(self)
