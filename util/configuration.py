@@ -8,7 +8,8 @@ import pathlib
 class ReadoutBoardConfig:
     fastreadout_serial_number: str
     default_hv_driver: str
-    default_vdd_driver: str
+    default_vddd_driver: str
+    default_vdda_driver: str
     default_vssa_driver: str
     laser_port: str
     motion_port: str
@@ -61,14 +62,16 @@ def load_config() -> HitpixReadoutConfig:
         conf_section = config[section]
         fastreadout_serial = conf_section.get('fastreadout_serial')
         default_hv_driver = conf_section.get('default_hv_driver', 'manual')
-        default_vdd_driver = conf_section.get('default_vdd_driver', 'manual')
+        default_vddd_driver = conf_section.get('default_vddd_driver', 'manual')
+        default_vdda_driver = conf_section.get('default_vdda_driver', 'manual')
         default_vssa_driver = conf_section.get('default_vssa_driver', 'manual')
         motion_port = conf_section.get('motion_port', '')
         laser_port = conf_section.get('laser_port', '')
         boards[section] = ReadoutBoardConfig(
             fastreadout_serial,
             default_hv_driver,
-            default_vdd_driver=default_vdd_driver,
+            default_vddd_driver=default_vddd_driver,
+            default_vdda_driver=default_vdda_driver,
             default_vssa_driver=default_vssa_driver,
             motion_port=motion_port,
             laser_port=laser_port,

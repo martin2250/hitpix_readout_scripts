@@ -35,7 +35,8 @@ settings_default = {
     'threshold': 1.2,
     'baseline': 1.1,
     'vssa': 1.25, # 1.85 für HP2 -> ampout messung wiederholen
-    'vdd': 1.85,
+    'vddd': 1.95,
+    'vdda': 1.85,
     'frequency': 25.0,
     'pulse_ns': 200.0,
 }

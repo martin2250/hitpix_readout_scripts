@@ -17,7 +17,8 @@ class FrameConfig:
     dac_cfg: hitpix.HitPixDacConfig
     voltage_baseline: float
     voltage_threshold: float
-    voltage_vdd: float
+    voltage_vddd: float
+    voltage_vdda: float
     voltage_vssa: float
     voltage_hv: float
     num_frames: int
@@ -60,6 +61,9 @@ class FrameConfig:
         if not 'rows' in d:
             d['rows'] = [-1]
         d['rows'] = np.array(d['rows'], dtype=np.uint)
+        if 'voltage_vdd' in d:
+            d['voltage_vddd'] = d['voltage_vdda'] = d['voltage_vdd']
+            del d['voltage_vdd']
         return FrameConfig(
             dac_cfg=dac_cfg,
             **d,

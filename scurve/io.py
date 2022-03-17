@@ -17,7 +17,8 @@ class SCurveConfig:
     injections_total: int
     voltage_baseline: float
     voltage_threshold: float
-    voltage_vdd: float
+    voltage_vddd: float
+    voltage_vdda: float
     voltage_vssa: float
     injection_pulse_us: float
     injection_pause_us: float
@@ -61,6 +62,9 @@ class SCurveConfig:
             d['readout_frequency'] = 25.0
         if not 'pulse_ns' in d:
             d['pulse_ns'] = -1.0
+        if 'voltage_vdd' in d:
+            d['voltage_vddd'] = d['voltage_vdda'] = d['voltage_vdd']
+            del d['voltage_vdd']
         return SCurveConfig(
             dac_cfg=dac_cfg,
             injection_voltage=injection_voltage,

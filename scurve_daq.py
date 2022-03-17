@@ -20,7 +20,8 @@ def main(
     args_scan: list[str],
     args_set: list[str],
     file_exists: Literal['delete', 'continue', 'exit', 'ask'],
-    vdd_driver: str = 'manual',
+    vddd_driver: str = 'manual',
+    vdda_driver: str = 'manual',
     vssa_driver: str = 'manual',
 ):
     import atexit
@@ -38,7 +39,7 @@ def main(
     import util.configuration
     import util.gridscan
     import util.helpers
-    import util.voltage_channel
+    from util.voltage_channel import open_voltage_channel
     from hitpix.readout import HitPixReadout
     from readout.fast_readout import FastReadout
     from readout.readout import SerialCobsComm
@@ -87,7 +88,8 @@ def main(
             voltage_baseline=scan_dict['baseline'],
             voltage_threshold=scan_dict['threshold'],
             dac_cfg=scan_dict['dac'],
-            voltage_vdd=scan_dict['vdd'],
+            voltage_vddd=scan_dict['vddd'],
+            voltage_vdda=scan_dict['vdda'],
             voltage_vssa=scan_dict['vssa'],
             injection_voltage=injection_voltage,
             injections_per_round=injections_per_round,
@@ -122,18 +124,22 @@ def main(
 
     ############################################################################
 
-    if vdd_driver == 'default':
-        vdd_driver = board.default_vdd_driver
+    if vddd_driver == 'default':
+        vddd_driver = board.default_vddd_driver
+
+    if vdda_driver == 'default':
+        vdda_driver = board.default_vdda_driver
 
     if vssa_driver == 'default':
         vssa_driver = board.default_vssa_driver
 
-    vdd_channel = util.voltage_channel.open_voltage_channel(vdd_driver, 'VDD')
-    vssa_channel = util.voltage_channel.open_voltage_channel(
-        vssa_driver, 'VSSA')
+    vddd_channel = open_voltage_channel(vddd_driver, 'VDDD')
+    vdda_channel = open_voltage_channel(vdda_driver, 'VDDA')
+    vssa_channel = open_voltage_channel(vssa_driver, 'VSSA')
 
     def set_voltages(config: SCurveConfig):
-        vdd_channel.set_voltage(config.voltage_vdd)
+        vddd_channel.set_voltage(config.voltage_vddd)
+        vdda_channel.set_voltage(config.voltage_vdda)
         vssa_channel.set_voltage(config.voltage_vssa)
 
     ############################################################################
@@ -235,7 +241,14 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--vdd_driver',
+        '--vddd_driver',
+        choices=('default', 'manual'),
+        default='default',
+        help='use SMU interface to set HV',
+    )
+
+    parser.add_argument(
+        '--vdda_driver',
         choices=('default', 'manual'),
         default='default',
         help='use SMU interface to set HV',
@@ -285,5 +298,6 @@ if __name__ == '__main__':
         args_set=args.set or [],
         file_exists=args.exists,
         vssa_driver=args.vssa_driver,
-        vdd_driver=args.vdd_driver,
+        vddd_driver=args.vddd_driver,
+        vdda_driver=args.vdda_driver,
     )

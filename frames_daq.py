@@ -22,7 +22,8 @@ def main(
     file_exists: Literal['delete', 'continue', 'exit', 'ask'],
     sums_only: bool,
     hv_driver: str = 'manual',
-    vdd_driver: str = 'manual',
+    vddd_driver: str = 'manual',
+    vdda_driver: str = 'manual',
     vssa_driver: str = 'manual',
     live_fps: Optional[float] = False,
 ):
@@ -82,7 +83,8 @@ def main(
             dac_cfg=config_dict['dac'],
             voltage_baseline=config_dict['baseline'],
             voltage_threshold=config_dict['threshold'],
-            voltage_vdd=config_dict['vdd'],
+            voltage_vddd=config_dict['vddd'],
+            voltage_vdda=config_dict['vdda'],
             voltage_vssa=config_dict['vssa'],
             voltage_hv=config_dict['hv'],
             num_frames=num_frames,
@@ -124,19 +126,24 @@ def main(
     if hv_driver == 'default':
         hv_driver = board.default_hv_driver
 
-    if vdd_driver == 'default':
-        vdd_driver = board.default_vdd_driver
+    if vddd_driver == 'default':
+        vddd_driver = board.default_vddd_driver
+
+    if vdda_driver == 'default':
+        vdda_driver = board.default_vdda_driver
 
     if vssa_driver == 'default':
         vssa_driver = board.default_vssa_driver
 
     hv_channel = open_voltage_channel(hv_driver, 'HV')
-    vdd_channel = open_voltage_channel(vdd_driver, 'VDD')
+    vddd_channel = open_voltage_channel(vddd_driver, 'VDDD')
+    vdda_channel = open_voltage_channel(vdda_driver, 'VDDA')
     vssa_channel = open_voltage_channel(vssa_driver, 'VSSA')
 
     def set_voltages(config: FrameConfig):
         hv_channel.set_voltage(config.voltage_hv)
-        vdd_channel.set_voltage(config.voltage_vdd)
+        vddd_channel.set_voltage(config.voltage_vddd)
+        vdda_channel.set_voltage(config.voltage_vdda)
         vssa_channel.set_voltage(config.voltage_vssa)
 
     atexit.register(
@@ -293,7 +300,14 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--vdd_driver',
+        '--vddd_driver',
+        choices=('default', 'manual'),
+        default='default',
+        help='use SMU interface to set HV',
+    )
+
+    parser.add_argument(
+        '--vdda_driver',
         choices=('default', 'manual'),
         default='default',
         help='use SMU interface to set HV',
@@ -374,7 +388,8 @@ if __name__ == '__main__':
         read_adders=args.read_adders,
         hv_driver=args.hv_driver,
         vssa_driver=args.vssa_driver,
-        vdd_driver=args.vdd_driver,
+        vddd_driver=args.vddd_driver,
+        vdda_driver=args.vdda_driver,
         file_exists=args.exists,
         sums_only=args.sums_only,
         live_fps=args.live_fps,
