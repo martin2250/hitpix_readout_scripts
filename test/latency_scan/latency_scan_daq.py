@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 if True:  # do not reorder with autopep8 or sortimports
-    sys.path.insert(1, str(Path(__file__).parents[1]))
+    sys.path.insert(1, str(Path(__file__).parents[2]))
 
 import atexit
 import time

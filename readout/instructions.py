@@ -100,6 +100,15 @@ class SetPins(Instruction):
             return SetPins(self.pins | (1 << pin_number))
         else:
             return SetPins(self.pins & ~(1 << pin_number))
+    
+    def pulse_pin(self, pin_number: int, value: bool, sleep: list[Instruction]) -> list[Instruction]:
+        '''high, sleep, low, sleep'''
+        return [
+            self.set_pin(pin_number, value),
+            *sleep,
+            self,
+            *sleep,
+        ]
 
     def get_pin(self, pin_number: int) -> bool:
         return (self.pins & (1 << pin_number)) != 0
