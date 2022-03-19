@@ -194,7 +194,7 @@ def prog_read_matrix(setup: HitPixSetup, shift_clk_div: int = 1, pulse_cycles: i
             pins.set_pin(ReadoutPins.ro_penable, True),
             Sleep(pulse_cycles),
             ShiftOut(1, False),
-            Sleep(pulse_cycles),
+            Sleep(pulse_cycles + 3),
             pins,
             Sleep(pulse_cycles),
             # shift out data of current row and shift in next row

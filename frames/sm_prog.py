@@ -42,6 +42,7 @@ def prog_read_frames(
         cfg_int,
         pins,
         *prog_shift_dense(setup.encode_column_config(col_cfg_init), False),
+        Sleep(3),
         *pulse_sleep,
         pins.set_pin(ReadoutPins.ro_ldconfig, True),
         *pulse_sleep,
@@ -99,7 +100,7 @@ def prog_read_frames(
                 pins_penable,
                 *pulse_sleep,
                 ShiftOut(1, False),
-                *pulse_sleep,
+                *prog_sleep(pulse_cycles + 3, cfg_int),
                 pins,
                 *pulse_sleep,
             ])
@@ -107,6 +108,7 @@ def prog_read_frames(
         prog.extend([
             Reset(True, True),
             *prog_shift_dense(setup.encode_column_config(shift_col_cfg), shift_shiftout),
+            Sleep(3),
             *pulse_sleep,
             pins.set_pin(ReadoutPins.ro_ldconfig, True),
             *pulse_sleep,
@@ -150,6 +152,7 @@ def prog_read_adders(
         pins,
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(col_cfg), False),
+        Sleep(3),
         pins.set_pin(ReadoutPins.ro_ldconfig, True),
         *pulse_sleep,
         pins,
@@ -177,7 +180,7 @@ def prog_read_adders(
         pins.set_pin(ReadoutPins.ro_penable, True),
         *pulse_sleep,
         ShiftOut(1, False),
-        *pulse_sleep,
+        *prog_sleep(pulse_cycles + 3, cfg_int),
         # reset counters
         pins.set_pin(ReadoutPins.ro_rescnt, True),
         *pulse_sleep,
@@ -191,6 +194,7 @@ def prog_read_adders(
         # shift out column register contents
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(col_cfg), True),
+        Sleep(3),
         *pulse_sleep,
         # load config register
         pins_frame.set_pin(ReadoutPins.ro_ldconfig, True),

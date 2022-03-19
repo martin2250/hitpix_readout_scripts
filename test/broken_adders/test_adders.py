@@ -70,7 +70,7 @@ cfg_vddd_driver = 'default'
 cfg_vdda_driver = 'default'
 cfg_vssa_driver = 'default'
 
-cfg_frequency = 45.0
+cfg_frequency = 40.0
 
 cfg_inject_columns = 4
 cfg_inject_num = 5
@@ -95,8 +95,8 @@ pulse_cycles = math.ceil(cfg_pulse_ns * cfg_frequency / 1000)
 column_pitch = setup.pixel_columns // cfg_inject_columns
 assert column_pitch * cfg_inject_columns == setup.pixel_columns
 
-# if isinstance(cfg_dac, hitpix.HitPix2DacConfig):
-#     cfg_dac.vth = int(255 * cfg_threshold / cfg_vdda)
+if isinstance(cfg_dac, hitpix.HitPix2DacConfig):
+    cfg_dac.vth = int(255 * cfg_threshold / cfg_vdda)
 
 ############################################################################
 print('[yellow]connecting to readout')
@@ -176,6 +176,7 @@ prog_reset_init = [
     pins,
     Reset(True, True),
     *prog_shift_dense(setup.encode_column_config(HitPixColumnConfig()), False),
+    Sleep(3),
     # load registers
     *pins.pulse_pin(ReadoutPins.ro_ldconfig, True, pulse_sleep),
     # reset counters
@@ -191,11 +192,12 @@ prog_reset = [
     pins.set_pin(ReadoutPins.ro_penable, True),
     *pulse_sleep,
     ShiftOut(1, False),
-    *pulse_sleep,
+    *prog_sleep(pulse_cycles + 3, cfg),,
     pins,
     GetTime(),
     Reset(True, True),
     *prog_shift_dense(setup.encode_column_config(HitPixColumnConfig()), True),
+    Sleep(3),
     *pulse_sleep,
     *pins.pulse_pin(ReadoutPins.ro_ldconfig, True, pulse_sleep),
     Finish(),
@@ -251,6 +253,7 @@ for row in track(cfg_rows, description='injecting into rows'):
         pins,
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(col_cfgs[0]), False),
+        Sleep(3),
         # load registers
         *pins.pulse_pin(ReadoutPins.ro_ldconfig, True, pulse_sleep),
     ]
@@ -272,12 +275,13 @@ for row in track(cfg_rows, description='injecting into rows'):
             pins.set_pin(ReadoutPins.ro_penable, True),
             *pulse_sleep,
             ShiftOut(1, False),
-            *pulse_sleep,
+            *prog_sleep(pulse_cycles + 3, cfg),
             pins,
             # read shift register
             GetTime(),
             Reset(True, True),
             *prog_shift_dense(setup.encode_column_config(col_cfg_next), True),
+            Sleep(3),
             *pulse_sleep,
             *pins.pulse_pin(ReadoutPins.ro_ldconfig, True, pulse_sleep),
         ])

@@ -211,7 +211,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--voltages',
-        default='0.0:1.2:60',
+        default='0.0:1.2:30',
         help='range of injection voltages start:stop:count[:log]',
     )
 

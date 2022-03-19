@@ -149,6 +149,7 @@ def test_shift_register(
         cfg_write,
         Sleep(5),
         *prog_shift_dense(test_string, False),
+        Sleep(3),
         # start reading
         cfg_read,
         Reset(True, True),

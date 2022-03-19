@@ -28,6 +28,7 @@ def prog_laser_inject(
     prog_init = [
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(col_cfg_init), False),
+        Sleep(3),
         cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(pulse_cycles),
         cfg_int,
@@ -55,6 +56,7 @@ def prog_laser_inject(
             Sleep(pulse_cycles),
             Reset(True, True),
             *prog_shift_dense(setup.encode_column_config(col_cfg), row > 0),
+            Sleep(3),
             Sleep(pulse_cycles),
             cfg_int.set_pin(ReadoutPins.ro_ldconfig, True),
             Sleep(pulse_cycles),
@@ -72,7 +74,7 @@ def prog_laser_inject(
             cfg_int.set_pin(ReadoutPins.ro_penable, True),
             Sleep(pulse_cycles),
             ShiftOut(1, False),
-            Sleep(pulse_cycles),
+            Sleep(pulse_cycles + 3),
             cfg_int,
             Sleep(pulse_cycles),
         ])

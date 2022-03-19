@@ -52,6 +52,7 @@ def prog_injections_variable(
         pins,
         Reset(True, True),
         *prog_shift_dense(setup.encode_column_config(cfg_col_prep), False),
+        Sleep(3),
         Sleep(pulse_cycles),
         pins.set_pin(ReadoutPins.ro_ldconfig, True),
         Sleep(pulse_cycles),
@@ -88,6 +89,7 @@ def prog_injections_variable(
                 # shift in column config for readout
                 Reset(True, True),
                 *prog_shift_dense(setup.encode_column_config(cfg_col_readout), False),
+                Sleep(3),
                 Sleep(pulse_cycles),
                 pins.set_pin(ReadoutPins.ro_ldconfig, True),
                 Sleep(pulse_cycles),
@@ -101,7 +103,7 @@ def prog_injections_variable(
                 pins.set_pin(ReadoutPins.ro_penable, True),
                 Sleep(pulse_cycles),
                 ShiftOut(1, False),
-                Sleep(pulse_cycles),
+                Sleep(pulse_cycles + 3),
                 pins,
                 Sleep(pulse_cycles),
                 # add time to make readout more consistent
@@ -109,6 +111,7 @@ def prog_injections_variable(
                 # read out data while shifting in configuration for the next round of injections
                 Reset(True, True),
                 *prog_shift_dense(setup.encode_column_config(cfg_col_inj_next), True),
+                Sleep(3),
                 Sleep(pulse_cycles),
                 pins.set_pin(ReadoutPins.ro_ldconfig, True),
                 Sleep(pulse_cycles),
