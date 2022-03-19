@@ -49,7 +49,7 @@ class SCurveConfig:
         injection_voltage = np.array(d['injection_voltage'])
         del d['injection_voltage']
         # legacy data
-        for key in ['injection_pause_us', 'injection_pulse_us', 'voltage_vssa', 'voltage_vdd', 'simultaneous_injections']:
+        for key in ['injection_pause_us', 'injection_pulse_us', 'voltage_vssa', 'voltage_vdda', 'voltage_vddd', 'simultaneous_injections']:
             if not key in d:
                 d[key] = -1
         if not 'rows' in d:

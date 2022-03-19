@@ -47,7 +47,7 @@ class FrameConfig:
             **d['dac_cfg'])
         del d['dac_cfg']
         # TODO: remove this, HV should always be set
-        for name in ['voltage_hv', 'voltage_vdd', 'voltage_vssa']:
+        for name in ['voltage_hv', 'voltage_vdda', 'voltage_vddd', 'voltage_vssa']:
             if not name in d:
                 d[name] = -1.0
         if not 'reset_counters' in d:
