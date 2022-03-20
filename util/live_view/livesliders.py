@@ -35,13 +35,17 @@ class LiveSliders:
                     val, sli),
                 resolution=cast(float, slider_value.resolution),  # None is ok
             )
+            slider_value.scale.set(slider_value.value)
             slider_value.scale.pack()
 
     def __scale_command(self, val_new: str, slider_value: SliderValue):
         if slider_value.resolution is None:
-            slider_value.value = int(val_new)
+            value = int(val_new)
         else:
-            slider_value.value = float(val_new)
+            value = float(val_new)
+        if slider_value.value == value:
+            return
+        slider_value.value = value
         self.callback(slider_value)
 
 
