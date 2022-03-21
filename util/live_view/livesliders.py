@@ -26,7 +26,7 @@ class LiveSliders:
             label = tkinter.Label(frame, text=slider_value.label, width=10)
             label.pack(side='left')
             vfrom, vto = slider_value.extent
-            slider_value.scale = tkinter.Scale(
+            scale = slider_value.scale = tkinter.Scale(
                 frame,
                 from_=vfrom, to=vto,
                 orient=tkinter.HORIZONTAL,
@@ -35,8 +35,26 @@ class LiveSliders:
                     val, sli),
                 resolution=cast(float, slider_value.resolution),  # None is ok
             )
-            slider_value.scale.set(slider_value.value)
-            slider_value.scale.pack()
+            scale.bind("<Button-4>", lambda _, sli=slider_value: self.__on_mousewheel(+1, sli))
+            scale.bind("<Button-5>", lambda _, sli=slider_value: self.__on_mousewheel(-1, sli))
+            scale.set(slider_value.value)
+            scale.pack()
+        
+    def __on_mousewheel(self, direction: int, slider_value: SliderValue):
+        scale = slider_value.scale
+        assert scale is not None
+        # update value
+        if slider_value.resolution is None:
+            slider_value.value += direction
+        else:
+            slider_value.value += slider_value.resolution * direction
+        # check range
+        if slider_value.value < slider_value.extent[0]:
+            slider_value.value = slider_value.extent[0]
+        if slider_value.value > slider_value.extent[1]:
+            slider_value.value = slider_value.extent[1]
+        scale.set(slider_value.value)
+        self.callback(slider_value)
 
     def __scale_command(self, val_new: str, slider_value: SliderValue):
         if slider_value.resolution is None:
