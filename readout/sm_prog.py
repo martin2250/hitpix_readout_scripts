@@ -137,7 +137,7 @@ def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7, shif
         shift_select_dac = False,
         shift_word_len = shift_out_bits or 32,
         shift_clk_div = shift_clk_div,
-        shift_sample_latency=sample_latency[shift_clk_div],
+        shift_sample_latency=0,
     )
     pins = SetPins(0)
     return [

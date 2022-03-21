@@ -10,8 +10,9 @@ from typing import Any, Callable, Literal, Optional
 from matplotlib.pyplot import pause
 from numpy import isin
 from frames.daq_live import FramesLiveSmConfig, live_decode_responses, live_write_statemachine
+from hitpix import HitPixColumnConfig
 
-from readout.sm_prog import prog_dac_config
+from readout.sm_prog import prog_col_config, prog_dac_config
 
 
 def __get_config_dict_ext() -> dict:
@@ -28,6 +29,7 @@ def main(
     args_set: list[str],
     rows_str: str,
     read_adders: bool,
+    test_ampout: bool,
     fps: float,
     gui: bool,
     hv_driver: str = 'manual',
@@ -124,9 +126,9 @@ def main(
 
     voltage_channels = {
         'hv':   (hv_channel, 0.0, 200.0),
-        'vddd': (vddd_channel, 0.0, 1.8),
-        'vdda': (vdda_channel, 0.0, 1.8),
-        'vssa': (vssa_channel, 0.0, 1.8),
+        'vddd': (vddd_channel, 0.0, 2.05),
+        'vdda': (vdda_channel, 0.0, 2.05),
+        'vssa': (vssa_channel, 0.0, 2.05),
     }
 
     hv_channel.set_voltage(config_dict['hv'])
@@ -150,14 +152,18 @@ def main(
 
     ############################################################################
 
-    if read_adders:
-        view = LiveViewAdders(setup.pixel_columns, 100)
-    else:
-        view = LiveViewFrames((len(rows), setup.pixel_columns))
+    view = None
+    if not test_ampout:
+        if read_adders:
+            view = LiveViewAdders(setup.pixel_columns, 100)
+        else:
+            view = LiveViewFrames((len(rows), setup.pixel_columns))
     
     frame_us_per_packet = -1.0
 
     def callback_frames(hits_new: np.ndarray):
+        if view is None:
+            return
         view.show_frame(hits_new.astype(np.int64), frame_us_per_packet)
 
     ############################################################################
@@ -190,24 +196,31 @@ def main(
             value=config_dict['hv'],
             resolution=0.5,
         ))
-        slider_values.append(SliderValue(
-            label='frame_us',
-            extent=(0.0, config_dict['frame_us']),
-            value=config_dict['frame_us'],
-            resolution=1.0,
-        ))
-        slider_values.append(SliderValue(
-            label='pause_us',
-            extent=(0.0, config_dict['pause_us']),
-            value=config_dict['pause_us'],
-            resolution=1.0,
-        ))
-        slider_values.append(SliderValue(
-            label='pulse_ns',
-            extent=(0.0, 1500.0),
-            value=config_dict['pulse_ns'],
-            resolution=25.0,
-        ))
+        if not test_ampout:
+            slider_values.append(SliderValue(
+                label='frame_us',
+                extent=(0.0, config_dict['frame_us']),
+                value=config_dict['frame_us'],
+                resolution=1.0,
+            ))
+            slider_values.append(SliderValue(
+                label='pause_us',
+                extent=(0.0, config_dict['pause_us']),
+                value=config_dict['pause_us'],
+                resolution=1.0,
+            ))
+            slider_values.append(SliderValue(
+                label='pulse_ns',
+                extent=(0.0, 1500.0),
+                value=config_dict['pulse_ns'],
+                resolution=25.0,
+            ))
+        if test_ampout:
+            slider_values.append(SliderValue(
+                label='ampout_col',
+                extent=(0, setup.pixel_columns),
+                value=0,
+            ))
         dac_maxvals = {
             'vth': 255,
         }
@@ -268,30 +281,38 @@ def main(
     ############################################################################
     # prepare response parser
 
-    response_queue = queue.Queue()
-    fastreadout.orphan_response_queue = response_queue
+    if not test_ampout:
+        response_queue = queue.Queue()
+        fastreadout.orphan_response_queue = response_queue
 
-    thread_decode = threading.Thread(
-        target=live_decode_responses,
-        daemon=True,
-        kwargs={
-            'response_queue': response_queue,
-            'setup': ro.setup,
-            'reset_counters': reset_counters,
-            'num_rows': len(rows),
-            'callback': callback_frames,
-        },
-    )
-    thread_decode.start()
+        thread_decode = threading.Thread(
+            target=live_decode_responses,
+            daemon=True,
+            kwargs={
+                'response_queue': response_queue,
+                'setup': ro.setup,
+                'reset_counters': reset_counters,
+                'num_rows': len(rows),
+                'callback': callback_frames,
+            },
+        )
+        thread_decode.start()
 
     ############################################################################
     # starting statemachine with correct number of runs
 
+    ampout_col = 0
+
     def start_sm():
         nonlocal frame_us_per_packet
-        num_runs = int(1e6 / (fps * time_frame_us))
-        frame_us_per_packet = num_runs * sm_config.frame_us
-        ro.sm_start(runs=num_runs, packets=0)
+        if test_ampout:
+            colcfg = HitPixColumnConfig(ampout_col=(1 << ampout_col))
+            data = setup.encode_column_config(colcfg)
+            ro.sm_exec(prog_col_config(data))
+        else:
+            num_runs = int(1e6 / (fps * time_frame_us))
+            frame_us_per_packet = num_runs * sm_config.frame_us
+            ro.sm_start(runs=num_runs, packets=0)
     
     start_sm()
 
@@ -363,10 +384,14 @@ def main(
         callback=buffer_cb_dac,
     )
 
-    def buffer_cb_sm_prog(values: dict[str, float]):
-        nonlocal time_frame_us
+    def buffer_cb_sm_prog(values: dict[str, float | int]):
+        nonlocal time_frame_us, ampout_col
         update = False
         for name, value in values.items():
+            if name == 'ampout_col' and isinstance(value, int):
+                ampout_col = value
+                print(f'{name} = {value}')
+                continue
             if not (isinstance(name, str) and isinstance(value, float)):
                 continue
             if not hasattr(sm_config, name):
@@ -378,17 +403,18 @@ def main(
             return
         ro.sm_soft_abort()
         ro.wait_sm_idle()
-        time_frame_us = live_write_statemachine(
-            ro,
-            sm_config,
-            rows,
-            reset_counters,
-        )
+        if not test_ampout:
+            time_frame_us = live_write_statemachine(
+                ro,
+                sm_config,
+                rows,
+                reset_counters,
+            )
         start_sm()
             
 
     buffer_sm_prog = CommandBuffer(
-        matches=lambda name: name in {'pulse_ns', 'frame_us', 'pause_us'},
+        matches=lambda name: name in {'pulse_ns', 'frame_us', 'pause_us', 'ampout_col'},
         callback=buffer_cb_sm_prog,
     )
 
@@ -489,6 +515,12 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
+        '--test_ampout',
+        action='store_true',
+        help='test ampout instead of reading frames',
+    )
+
+    parser.add_argument(
         '--fps',
         type=float, default=2,
         help='show live image of frames',
@@ -526,6 +558,7 @@ if __name__ == '__main__':
         args_set=args.set or [],
         rows_str=args.rows,
         read_adders=args.read_adders,
+        test_ampout=args.test_ampout,
         hv_driver=args.hv_driver,
         vssa_driver=args.vssa_driver,
         vddd_driver=args.vddd_driver,
