@@ -218,7 +218,7 @@ def main(
         if test_ampout:
             slider_values.append(SliderValue(
                 label='ampout_col',
-                extent=(0, setup.pixel_columns),
+                extent=(0, setup.pixel_columns - 1),
                 value=0,
             ))
         dac_maxvals = {
