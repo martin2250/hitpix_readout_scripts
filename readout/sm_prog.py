@@ -129,7 +129,7 @@ def prog_dac_config(cfg_dac_bin: bitarray.bitarray) -> list[Instruction]:
         pins,
     ]
 
-def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 7, shift_out_bits: Optional[int] = None) -> list[Instruction]:
+def prog_col_config(cfg_col_bin: bitarray.bitarray, shift_clk_div: int = 0, shift_out_bits: Optional[int] = None) -> list[Instruction]:
     cfg_int = SetCfg(
         shift_rx_invert = True,
         shift_tx_invert = True,

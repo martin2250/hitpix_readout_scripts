@@ -390,6 +390,7 @@ def main(
         for name, value in values.items():
             if name == 'ampout_col' and isinstance(value, int):
                 ampout_col = value
+                update = True
                 print(f'{name} = {value}')
                 continue
             if not (isinstance(name, str) and isinstance(value, float)):
