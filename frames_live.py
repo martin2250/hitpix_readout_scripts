@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 from dataclasses import dataclass, field
 import dataclasses
@@ -93,6 +93,7 @@ def main(
     def close_fastreadout():
         print('[yellow]closing fastreadout')
         fastreadout.close()
+        print('[green]closed fastreadout')
 
     time.sleep(0.05)
     ro = HitPixReadout(SerialCobsComm(serial_port_name), setup)
@@ -103,6 +104,7 @@ def main(
         print('[yellow]closing readout')
         ro.sm_abort()
         ro.close()
+        print('[green]closed readout')
 
     ############################################################################
     print('[yellow]connecting to power supplies')
@@ -136,9 +138,11 @@ def main(
     vdda_channel.set_voltage(config_dict['vdda'])
     vssa_channel.set_voltage(config_dict['vssa'])
 
-    atexit.register(
-        lambda: print('[yellow]powering off HV') or hv_channel.shutdown(),
-    )
+    @atexit.register
+    def atexit_hv():
+        print('[yellow]powering off HV')
+        hv_channel.shutdown()
+        print('[green]powered off HV')
 
     ############################################################################
 
@@ -211,9 +215,9 @@ def main(
             ))
             slider_values.append(SliderValue(
                 label='pulse_ns',
-                extent=(0.0, 1500.0),
+                extent=(0.0, 2500.0),
                 value=config_dict['pulse_ns'],
-                resolution=25.0,
+                resolution=50.0,
             ))
         if test_ampout:
             slider_values.append(SliderValue(

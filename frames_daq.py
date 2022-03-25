@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 from typing import Any, Literal, Optional
 
@@ -121,14 +121,21 @@ def main(
     serial_port_name, board = config_readout.find_board()
 
     fastreadout = FastReadout(board.fastreadout_serial_number)
-    atexit.register(
-        lambda: print('[yellow]closing fastreadout') or fastreadout.close(),
-    )
+    @atexit.register
+    def atexit_fastreadout():
+        print('[yellow]closing fastreadout')
+        fastreadout.close()
+        print('[green]closed fastreadout')
 
     time.sleep(0.05)
     ro = HitPixReadout(SerialCobsComm(serial_port_name), setup)
     ro.initialize()
-    atexit.register(lambda: print('[yellow]closing readout') or ro.close())
+
+    @atexit.register
+    def atexit_readout():
+        print('[yellow]closing readout')
+        ro.close()
+        print('[green]closed readout')
 
     ############################################################################
     print('[yellow]connecting to power supplies')
@@ -156,9 +163,11 @@ def main(
         vdda_channel.set_voltage(config.voltage_vdda)
         vssa_channel.set_voltage(config.voltage_vssa)
 
-    atexit.register(
-        lambda: print('[yellow]powering off HV') or hv_channel.shutdown(),
-    )
+    @atexit.register
+    def atexit_hv():
+        print('[yellow]powering off HV')
+        hv_channel.shutdown()
+        print('[green]powered off HV')
 
     ############################################################################
 

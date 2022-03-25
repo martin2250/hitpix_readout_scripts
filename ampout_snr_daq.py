@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 '''
 Inject into pixels of last row (individually).
 Record waveforms from ampout pins with oscilloscope.

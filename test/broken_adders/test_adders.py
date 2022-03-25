@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 '''
 even without counting, the adder values seem to fluctuate
 

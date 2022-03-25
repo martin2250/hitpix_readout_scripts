@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 import argparse
 import dataclasses
 from multiprocessing.sharedctypes import Value

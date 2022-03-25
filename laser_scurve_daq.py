@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 from typing import Any, Literal, cast
 import hitpix.defaults
