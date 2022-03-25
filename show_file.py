@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import argparse
+import subprocess
+from pathlib import Path
 
 import h5py
 from h5py._hl.group import Group
@@ -40,6 +42,8 @@ a_input_file = parser.add_argument(
     help='h5 input file',
 )
 
+parser.add_argument('--walk', action='store_true')
+
 try:
     import argcomplete
     from argcomplete.completers import FilesCompleter
@@ -53,4 +57,17 @@ args = parser.parse_args()
 ################################################################################
 
 with h5py.File(args.input_file) as file:
-    walk_group_raw(file)
+    if args.walk:
+        walk_group_raw(file)
+        exit(0)
+    
+    parent = Path(__file__).parent
+    
+    for name, item in file.items():
+        name: str
+        if name.startswith('scurve'):
+            ret = subprocess.run([parent / 'scurve_plot.py', args.input_file])
+            exit(ret.returncode)
+        elif name.startswith('frames'):
+            ret = subprocess.run([parent / 'frames_plot.py', args.input_file])
+            exit(ret.returncode)
