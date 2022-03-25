@@ -38,7 +38,7 @@ settings_default = {
     'vddd': 1.95,
     'vdda': 1.85,
     'frequency': 25.0,
-    'pulse_ns': 200.0,
+    'pulse_ns': 1500.0,
 }
 
 setups = [

@@ -72,8 +72,7 @@ class FastReadout:
         self.ftdi.ftdi_fn.ftdi_set_bitmode(0xff, 0x00)
         self.ftdi.close()
         send.send(None)
-        exit()
-
+        send.close()
 
     def __read(self) -> None:
         recv, send = multiprocessing.Pipe(duplex=False)
@@ -101,6 +100,7 @@ class FastReadout:
                     if self.orphan_response_queue is not None:
                         self.orphan_response_queue.put(data)
                         continue
+        recv.close()
         proc.join()
 
     def expect_response(self) -> Response:

@@ -70,7 +70,8 @@ class LiveViewFrames(LiveView):
         fig.canvas.mpl_connect('close_event', on_close)
 
         while running:
-            plt.pause(cast(int, 0.05))  # plt.pause accepts floats
+            fig.canvas.start_event_loop(0.05)
+            # plt.pause(cast(int, 0.05))  # plt.pause accepts floats
             # read all available frames from queue
             hits_new = None
             plot_new_us = 0.0
