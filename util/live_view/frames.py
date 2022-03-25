@@ -67,7 +67,14 @@ class LiveViewFrames(LiveView):
             running = False
             self.closed_evt.set()
 
+        def on_click(event):
+            nonlocal plot_total_us
+            if event.inaxes is ax_total:
+                hits_total.fill(0)
+                plot_total_us = 0
+
         fig.canvas.mpl_connect('close_event', on_close)
+        fig.canvas.mpl_connect('button_press_event', on_click)
 
         while running:
             fig.canvas.start_event_loop(0.05)
@@ -140,7 +147,14 @@ class LiveViewAdders(LiveView):
             running = False
             self.closed_evt.set()
 
+        def on_click(event):
+            nonlocal total_us
+            if event.inaxes is ax_total:
+                scroll_buffer.fill(0)
+                total_us = 0
+
         fig.canvas.mpl_connect('close_event', on_close)
+        fig.canvas.mpl_connect('button_press_event', on_click)
 
         # main loop
         while running:
@@ -183,3 +197,11 @@ class LiveViewAdders(LiveView):
             # image_total.set_norm(LogNorm(vmin=1, vmax=vmax_total))
             # ax_frame.set_title(f'hits / {format_time(plot_new_us)}')
             # ax_total.set_title(f'hits / {format_time(plot_total_us)}')
+
+
+if __name__ == '__main__':
+    import time
+    live = LiveViewFrames((16, 16))
+    while True:
+        live.show_frame(np.random.poisson(3, (16, 16)), 1.0)
+        time.sleep(0.1)
