@@ -106,6 +106,11 @@ def live_decode_responses(
                 block_adders = np.bitwise_and(block_adders, mask_adders)
                 # counter counts down
                 block_adders = (adder_max - block_adders) % adder_max
+                # calculate quantile, hack for testbeam, TODO: make this pretty
+                if True:
+                    hits_per_frame = np.sum(block_adders, axis=1)
+                    hits_95 = np.quantile(hits_per_frame, 0.95)
+                    print(f'95th quantile hits/frame: {hits_95}')
                 block_adders =  np.sum(block_adders, axis=0)
                 callback(block_adders)
             else:
@@ -127,6 +132,11 @@ def live_decode_responses(
                     hits_last = hits_last_next
                 # counter counts down
                 block_frames = (ctr_max - block_frames) % ctr_max
+                # calculate quantile, hack for testbeam, TODO: make this pretty
+                if True:
+                    hits_per_frame = np.sum(block_frames, axis=(1, 2))
+                    hits_95 = np.quantile(hits_per_frame, 0.95)
+                    print(f'95th quantile hits/frame: {hits_95}')
                 block_frames =  np.sum(block_frames, axis=0)
                 callback(block_frames)
         except Exception as e:

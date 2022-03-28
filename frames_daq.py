@@ -189,6 +189,14 @@ def main(
             view = LiveViewFrames((len(rows), setup.pixel_columns))
 
         def callback_frames(hits_new: np.ndarray):
+            # calculate quantile, hack for testbeam, TODO: make this pretty
+            if True:
+                if read_adders:
+                    hits_per_frame = np.sum(hits_new, axis=1)
+                else:
+                    hits_per_frame = np.sum(hits_new, axis=(1, 2))
+                hits_95 = np.quantile(hits_per_frame, 0.95)
+                print(f'95th quantile hits/frame: {hits_95}')
             view.show_frame(np.sum(hits_new, axis=0).astype(np.int64), 1.0)
         callback = callback_frames
         # limit number of frames per run
