@@ -55,6 +55,9 @@ if __name__ == '__main__':
         config, hit_frames_first, _ , _= frames.io.load_frames(group_frames)
         # create full data array
         hits_frames = np.zeros(scan_shape + hit_frames_first.shape)
+        # infinite runs
+        if config.num_frames == 0:
+            config.num_frames = hit_frames_first.shape[0]
         # store first scurve
         hits_frames[tuple(0 for _ in scan_shape) + (...,)] = hit_frames_first
         # store remaining scurves
