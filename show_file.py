@@ -9,23 +9,25 @@ from h5py._hl.group import Group
 ################################################################################
 
 
-def walk_group_raw(group: h5py.Group, prefix: str = ''):
-    for name, item in group.items():
+def walk_group_raw(item: h5py.Group | h5py.Dataset, prefix: str = '/'):
+    # print name and type
+    if isinstance(item, h5py.Dataset):
+        print(f'{prefix} D {item.dtype}[{", ".join(str(i) for i in item.shape)}]')
+    # print attributes
+    for name, attr in item.attrs.items():
+        print(f'{prefix}[{name}] = {attr}')
+
+    # iterate over group
+    if not isinstance(item, h5py.Group):
+        return
+
+    for name, item in item.items():
         assert isinstance(item, h5py.Group) or isinstance(item, h5py.Dataset)
-
-        path = prefix + '/' + name
-
-        if isinstance(item, h5py.Dataset):
-            print(
-                f'{path} D {item.dtype}[{", ".join(str(i) for i in item.shape)}]')
-        else:
-            print(f'{path} G')
-
-        for name, attr in item.attrs.items():
-            print(f'{path}/{name} A  = {attr}')
-
+        path = prefix + name
         if isinstance(item, h5py.Group):
-            walk_group_raw(item, prefix=path)
+            path += '/'
+        walk_group_raw(item, prefix=path)
+
 
 ################################################################################
 
