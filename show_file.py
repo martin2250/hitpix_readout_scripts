@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import json
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,11 @@ def walk_group_raw(item: h5py.Group | h5py.Dataset, prefix: str = '/'):
         print(f'{prefix} D {item.dtype}[{", ".join(str(i) for i in item.shape)}]')
     # print attributes
     for name, attr in item.attrs.items():
+        try:
+            data = json.loads(attr)
+            attr = json.dumps(data, indent=4)
+        except:
+            pass
         print(f'{prefix}[{name}] = {attr}')
 
     # iterate over group
