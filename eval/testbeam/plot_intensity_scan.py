@@ -110,6 +110,9 @@ if stack == 'vertical':
     axes = cast(list[plt.Axes], axes) # not correct but good enough for pylance
     axes_x = axes[-1:]
     axes_y = axes
+    if len(input_files) > 2:
+        idx = len(input_files) // 2
+        axes_y = axes[idx:idx+1]
 elif stack == 'horizontal':
     fig, axes = plt.subplots(1, len(input_files), sharey=True, sharex=share_axes) # nopep8
     axes = cast(list[plt.Axes], axes) # not correct but good enough for pylance
@@ -308,7 +311,7 @@ for input_file, ax, title, linestyle in zip(input_files, axes, titles, linestyle
         w=[100] + [1] * len(intensity_hits_us),
     )
     if plot_type == 'fit_scatter':
-        ax.plot(fitdata[1], fitdata[2] / fitdata[1], 'x', label=title)
+        ax.plot(1000 * fitdata[1], 1000 * fitdata[2] / fitdata[1], 'x', label=title)
 
 ################################################################################
 
@@ -325,9 +328,10 @@ if plot_type == 'curve':
 elif plot_type == 'hitmap':
     for ax in axes_x: ax.set_xlabel('Pixel X')
     for ax in axes_y: ax.set_ylabel('Pixel Y')
-    vmax = max(im.get_clim()[1] for im in images)
-    for im in images:
-        im.set_clim(0, vmax)
+    if share_axes:
+        vmax = max(im.get_clim()[1] for im in images)
+        for im in images:
+            im.set_clim(0, vmax)
 elif plot_type == 'pixel_intensity':
     for ax in axes_x: ax.set_xlabel('Beam Intensity (1/us)')
     if stack is None:
