@@ -3,6 +3,7 @@
 '''
 
 import argparse
+import collections
 from dataclasses import dataclass, field
 import json
 from typing import Optional, cast
@@ -38,6 +39,7 @@ parser.add_argument('--title', action='append')
 parser.add_argument('--mask', action='append')
 parser.add_argument('--suptitle')
 parser.add_argument('--fit_gauss', action='store_true')
+parser.add_argument('--share_axes', action='store_true')
 parser.add_argument(
     '--mapping_file',
     type=Path, default=Path('/home/martin/Desktop/master-thesis/2022-03-27-testbeam/intensity_mapping.json'),  # nopep8
@@ -67,6 +69,7 @@ stack: Optional[str] = args.stack
 suptitle: Optional[str] = args.suptitle
 mapping_path: Path = args.mapping_file
 fit_gauss: bool = args.fit_gauss
+share_axes: bool = args.share_axes
 
 del args
 
@@ -103,12 +106,12 @@ intensity_table = {
 ################################################################################
 
 if stack == 'vertical':
-    fig, axes = plt.subplots(len(input_files), 1, sharex=True, sharey=True)
+    fig, axes = plt.subplots(len(input_files), 1, sharex=True, sharey=share_axes) # nopep8
     axes = cast(list[plt.Axes], axes) # not correct but good enough for pylance
     axes_x = axes[-1:]
     axes_y = axes
 elif stack == 'horizontal':
-    fig, axes = plt.subplots(1, len(input_files), sharey=True, sharex=True)
+    fig, axes = plt.subplots(1, len(input_files), sharey=True, sharex=share_axes) # nopep8
     axes = cast(list[plt.Axes], axes) # not correct but good enough for pylance
     axes_x = axes
     axes_y = axes[:1]
@@ -144,17 +147,25 @@ for input_file, ax, title, linestyle in zip(input_files, axes, titles, linestyle
         # load actual data
         dset = group_frames['adders' if mapping.adders else 'frames']
         assert isinstance(dset, h5py.Dataset)
-        hits = dset[()]
+        hits = dset.astype(np.uint16)[()] # 16 bits is enough for frames and adders
         assert isinstance(hits, np.ndarray)
+        # flip hitmap along x
         hits = np.flip(hits, axis=-1)
+        # account for overflowing counters
+        if mapping.adders:
+            # subtract offset (faulty daq calculation)
+            hits_sub = np.where(hits >= 48, hits - 48, 0)
+            hits = hits_sub // 255 # how many pixels had any hits at all?
+            hits_sub -= hits * 255 # subtract overflowing counters
+            # how many additional hits were registered?
+            hits += np.where(hits_sub > 0, 255 - hits_sub, 0)
         # apply mask
         for mask in itertools.chain(mapping.mask, extra_masks):
             mask = parse_ndrange(mask, 1 if mapping.adders else 2)
             hits[(...,) + mask] = 0
         # reshape hits to make adders also 2D
         if mapping.adders:
-            hits = hits[..., np.newaxis]
-            hits = np.max((hits - hits[0])[np.newaxis, ...], 0)
+            hits = hits.reshape(hits.shape[0], 1, hits.shape[-1])
         # cleanup
         del dset_times, dset, group_frames
 
@@ -210,21 +221,36 @@ for input_file, ax, title, linestyle in zip(input_files, axes, titles, linestyle
     beam_profile: Optional[np.ndarray] = None
 
     if fit_gauss:
-        def gauss_2d(X, posx: float, posy: float, total_int: float, sigma: float):
-            return total_int / (2 * np.pi * sigma * sigma) * np.exp(
-                -(
-                    np.square(X[0] - posx) + np.square(X[1] - posy)
-                ) / (2 * np.square(sigma))
+        if mapping.adders:
+            def gauss_1d(X, posx: float, total_int: float, sigma: float):
+                return total_int / (np.sqrt(2 * np.pi) * sigma) * np.exp(
+                    -np.square(X - posx) / (2 * np.square(sigma))
+                )
+            X_fit = np.arange(sensor_size[-1])
+            popt, pcov = scipy.optimize.curve_fit(
+                gauss_1d,
+                X_fit, hitmap_fit.flatten(),
+                p0 = (sensor_size[-1] / 2, 1000, 5),
             )
-        X_fit = np.indices(sensor_size)
-        popt, pcov = scipy.optimize.curve_fit(
-            gauss_2d,
-            X_fit.reshape(2, -1), hitmap_fit.flatten(),
-            p0 = tuple(x / 2 for x in sensor_size) + (1000, 5),
-        )
-        posx, posy, total_int, sigma = popt
-        intensity_factor = total_int / np.sum(hitmap_fit)
-        beam_profile = gauss_2d(X_fit, *popt)
+            posx, total_int, sigma = popt
+            intensity_factor = total_int / np.sum(hitmap_fit)
+            beam_profile = gauss_1d(X_fit, *popt).reshape(sensor_size)
+        else:
+            def gauss_2d(X, posx: float, posy: float, total_int: float, sigma: float):
+                return total_int / (2 * np.pi * sigma * sigma) * np.exp(
+                    -(
+                        np.square(X[0] - posx) + np.square(X[1] - posy)
+                    ) / (2 * np.square(sigma))
+                )
+            X_fit = np.indices(sensor_size)
+            popt, pcov = scipy.optimize.curve_fit(
+                gauss_2d,
+                X_fit.reshape(2, -1), hitmap_fit.flatten(),
+                p0 = tuple(x / 2 for x in sensor_size) + (1000, 5),
+            )
+            posx, posy, total_int, sigma = popt
+            intensity_factor = total_int / np.sum(hitmap_fit)
+            beam_profile = gauss_2d(X_fit, *popt)
 
     ############################################################################
 
