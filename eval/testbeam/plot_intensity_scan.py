@@ -5,22 +5,19 @@
 import argparse
 from dataclasses import dataclass, field
 import json
-from optparse import Option
-from typing import Iterable, Optional, cast
+from typing import Optional, cast
 from matplotlib.image import AxesImage
 
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-from rich import print
 import sys
 from pathlib import Path
-import bottleneck as bn
 import itertools
+import scipy.optimize
 
 if True:  # do not reorder with autopep8 or sortimports
     sys.path.insert(1, str(Path(__file__).parents[2]))
-import frames.io
 from util.time_sync import TimeSync
 from util import parse_ndrange
 
@@ -36,17 +33,11 @@ parser.add_argument(
     '--plot_type', required=True,
     choices=('curve', 'total_intensity', 'pixel_intensity', 'fit_scatter', 'hitmap'),
 )
-parser.add_argument(
-    '--stack',
-    choices=('horizontal', 'vertical'),
-)
-parser.add_argument(
-    '--title',
-    action='append',
-)
-parser.add_argument(
-    '--suptitle',
-)
+parser.add_argument('--stack', choices=('horizontal', 'vertical'))
+parser.add_argument('--title', action='append')
+parser.add_argument('--mask', action='append')
+parser.add_argument('--suptitle')
+parser.add_argument('--fit_gauss', action='store_true')
 parser.add_argument(
     '--mapping_file',
     type=Path, default=Path('/home/martin/Desktop/master-thesis/2022-03-27-testbeam/intensity_mapping.json'),  # nopep8
@@ -68,12 +59,14 @@ except ImportError:
 args = parser.parse_args()
 
 input_files: list[Path] = args.input_file
-titles: list[str] = args.title
+titles: list[str] = args.title or []
+extra_masks: list[str] = args.mask or []
 plot_type: str = args.plot_type
 save: Optional[Path] = args.save
 stack: Optional[str] = args.stack
 suptitle: Optional[str] = args.suptitle
 mapping_path: Path = args.mapping_file
+fit_gauss: bool = args.fit_gauss
 
 del args
 
@@ -127,8 +120,9 @@ else:
 ################################################################################
 
 images: list[AxesImage] = []
+linestyles = itertools.cycle(['solid', 'dotted', 'dashed', 'dashdot'])
 
-for input_file, ax, title in zip(input_files, axes, titles):
+for input_file, ax, title, linestyle in zip(input_files, axes, titles, linestyles):
     if stack is not None:
         ax.set_title(title)
     mapping = mapping_file[input_file.name]
@@ -152,16 +146,19 @@ for input_file, ax, title in zip(input_files, axes, titles):
         assert isinstance(dset, h5py.Dataset)
         hits = dset[()]
         assert isinstance(hits, np.ndarray)
+        hits = np.flip(hits, axis=-1)
         # apply mask
-        for mask in mapping.mask:
+        for mask in itertools.chain(mapping.mask, extra_masks):
             mask = parse_ndrange(mask, 1 if mapping.adders else 2)
-            hits[..., mask] = 0
+            hits[(...,) + mask] = 0
         # reshape hits to make adders also 2D
         if mapping.adders:
             hits = hits[..., np.newaxis]
             hits = np.max((hits - hits[0])[np.newaxis, ...], 0)
         # cleanup
         del dset_times, dset, group_frames
+
+    ############################################################################
 
     # plot hit rate over time
     if plot_type == 'curve':
@@ -188,7 +185,8 @@ for input_file, ax, title in zip(input_files, axes, titles):
                     color=f'C{idx}', alpha=0.5,
                 )
         continue
-
+    
+    ############################################################################
     # sum up spills of same intensity
     sensor_size = hits.shape[1:]
     # hitmap for each intensity
@@ -204,23 +202,70 @@ for input_file, ax, title in zip(input_files, axes, titles):
     intensity_hits_us = \
         intensity_hits / intensity_us[..., np.newaxis, np.newaxis]
 
+    ############################################################################
+
+    # use weakest intensity only for fit
+    hitmap_fit = intensity_hits[0] / intensity_us[0]
+    intensity_factor = 1.0 # factor between sensor area and full
+    beam_profile: Optional[np.ndarray] = None
+
+    if fit_gauss:
+        def gauss_2d(X, posx: float, posy: float, total_int: float, sigma: float):
+            return total_int / (2 * np.pi * sigma * sigma) * np.exp(
+                -(
+                    np.square(X[0] - posx) + np.square(X[1] - posy)
+                ) / (2 * np.square(sigma))
+            )
+        X_fit = np.indices(sensor_size)
+        popt, pcov = scipy.optimize.curve_fit(
+            gauss_2d,
+            X_fit.reshape(2, -1), hitmap_fit.flatten(),
+            p0 = tuple(x / 2 for x in sensor_size) + (1000, 5),
+        )
+        posx, posy, total_int, sigma = popt
+        intensity_factor = total_int / np.sum(hitmap_fit)
+        beam_profile = gauss_2d(X_fit, *popt)
+
+    ############################################################################
+
+
     if plot_type == 'hitmap':
-        im = ax.imshow(np.sum(intensity_hits_us, axis=0))
+        hitmap = np.sum(intensity_hits, axis=0) / np.sum(intensity_us)
+        im = ax.imshow(hitmap)
         images.append(im)
         fig.colorbar(im, ax=ax, label='Hits/µs')
         continue
     if plot_type == 'pixel_intensity':
-        ax.plot(
-            intensity_ion_us,
-            intensity_hits_us.reshape(len(intensity_hits_us), -1),
-            'x-', alpha=0.3, label=title,
-        )
+        if fit_gauss:
+            # group pixels by beam intensity and plot each group as a line
+            assert beam_profile is not None
+            num_groups = 5
+            pixel_intensity_index = np.ceil(num_groups * beam_profile / np.max(beam_profile)) - 1
+            for igroup in range(num_groups):
+                pixel_in_group = pixel_intensity_index == igroup
+                intensity_group_hits_us = np.sum(intensity_hits_us[..., pixel_in_group], axis=1) # nopep8
+                intensity_group_hits_us /= np.sum(pixel_in_group)
+                ax.plot(
+                    intensity_ion_us,
+                    intensity_group_hits_us,
+                    'x',
+                    color=f'C{igroup}',
+                    ls=linestyle if stack is None else 'solid',
+                    label=title if igroup == 0 else None,
+                )
+        else:
+            # plot each pixel as a line
+            ax.plot(
+                intensity_ion_us,
+                intensity_hits_us.reshape(len(intensity_hits_us), -1),
+                'x-', alpha=0.3
+            )
         continue
     if plot_type == 'total_intensity':
         ax.plot(
             intensity_ion_us,
-            np.sum(intensity_hits_us, axis=(1, 2)),
-            'x', label=title,
+            intensity_factor * np.sum(intensity_hits_us, axis=(1, 2)),
+            'x-', label=title,
         )
         continue
 
@@ -257,11 +302,25 @@ elif plot_type == 'hitmap':
     vmax = max(im.get_clim()[1] for im in images)
     for im in images:
         im.set_clim(0, vmax)
-elif plot_type in ['total_intensity', 'pixel_intensity']:
+elif plot_type == 'pixel_intensity':
+    for ax in axes_x: ax.set_xlabel('Beam Intensity (1/us)')
     if stack is None:
         plt.legend()
+    if fit_gauss:
+        for ax in axes_y: ax.set_ylabel('Mean Pixel Hit Rate (1/µs)')
+    else:
+        for ax in axes_y: ax.set_ylabel('Pixel Hit Rate (1/µs)')
+    for ax in axes:
+        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0)
+elif plot_type == 'total_intensity':
     for ax in axes_x: ax.set_xlabel('Beam Intensity (1/us)')
-    for ax in axes_y: ax.set_ylabel('Hit Rate (1/µs)')
+    if fit_gauss:
+        for ax in axes_y: ax.set_ylabel('Hit Rate, adjusted to full Beam (1/µs)')
+    else:
+        for ax in axes_y: ax.set_ylabel('Sensor Hit Rate (1/µs)')
+    if stack is None:
+        plt.legend()
     for ax in axes:
         ax.set_xlim(left=0)
         ax.set_ylim(bottom=0)
