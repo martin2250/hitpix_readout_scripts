@@ -3,196 +3,222 @@
 ffmpeg -framerate 30 -pattern_type glob -i '*.jpg' test.mp4
 '''
 
-import argparse
+import os
 import time
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsWrite
 
 import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import sys
-from pathlib import Path
 import scipy.ndimage
 from concurrent.futures import ProcessPoolExecutor
 
-if True:  # do not reorder with autopep8 or sortimports
-    sys.path.insert(1, str(Path(__file__).parents[2]))
-from util import parse_ndrange
-
 ################################################################################
 
-parser = argparse.ArgumentParser()
+def plot_cluster_size(
+    input_file: str,
+    h5group: str,
+    save: Optional[str],
+    diagonal: bool,
+    plot_average: bool,
+    plot_all: bool,
+    plot_largest: Optional[int],
+    plot_larger: Optional[int],
+    mask: list[tuple[slice, ...]],
+    logfile: 'Optional[SupportsWrite[str]]' = None
+) -> None:
 
-a_input_file = parser.add_argument(
-    'input_file',
-    help='h5 input file',
-)
+    if logfile is None:
+        logfile = open(os.devnull, 'w')
 
-parser.add_argument('--plot_average', action='store_true')
-parser.add_argument('--plot_largest', type=int)
-parser.add_argument('--plot_larger', type=int)
-parser.add_argument('--plot_all', action='store_true')
+    ############################################################################
+    # load data
 
-parser.add_argument('--diagonal', action='store_true')
-parser.add_argument('--h5group', default='frames')
-parser.add_argument('--mask', action='append')
-parser.add_argument('--save', help='output image file, use {} as placeholder')
+    print('loading data', file=logfile)
 
-################################################################################
+    with h5py.File(input_file) as file:
+        # load frames group
+        group_frames = file[h5group]
+        assert isinstance(group_frames, h5py.Group)
+        # load frames dataset
+        dset = group_frames['frames']
+        assert isinstance(dset, h5py.Dataset)
+        hits = dset.astype(np.uint32)[()] # 8 bits is enough for counters
+        assert isinstance(hits, np.ndarray)
+        # flip hitmap along x
+        hits = np.flip(hits, axis=-1)
 
-try:
-    import argcomplete
-    from argcomplete.completers import FilesCompleter
-    setattr(a_input_file, 'completer', FilesCompleter('h5'))
-    argcomplete.autocomplete(parser)
-except ImportError:
-    pass
+    # apply mask
+    for index in mask:
+        hits[index] = 0
 
-################################################################################
+    ############################################################################
 
-args = parser.parse_args()
-
-input_file: str = args.input_file
-h5group: str = args.h5group
-save: Optional[str] = args.save
-diagonal: bool = args.diagonal
-plot_average: bool = args.plot_average
-plot_all: bool = args.plot_all
-plot_largest: Optional[int] = args.plot_largest
-plot_larger: Optional[int] = args.plot_larger
-
-mask = [
-    (...,) + parse_ndrange(mask_str, 2)
-    for mask_str in (args.mask or [])
-]
-
-del args
-
-def show_save(name: str):
-    if save is None:
-        plt.title(name)
-        plt.show()
+    # only allow connections inside a single frame, not between successive frames
+    structure = np.zeros((3, 3, 3), dtype=np.bool8)
+    if diagonal:
+        structure[1] = True
     else:
-        plt.savefig(save.replace('{}', name))
+        # generates plus shaped mask
+        structure[1, 1, :] = True
+        structure[1, :, 1] = True
 
-################################################################################
-# load data
+    print('labelling clusters', file=logfile)
+    labels = hits # rename
+    # replace hits with cluster labels
+    scipy.ndimage.label(hits, structure=structure, output=labels)
 
-print('loading data')
+    print('measuring cluster sizes', file=logfile)
+    # measure size of each label
+    sizes = np.bincount(labels.flat)
+    # do not replace zero with anything
+    sizes[0] = 0
 
-with h5py.File(input_file) as file:
-    # load frames group
-    group_frames = file[h5group]
-    assert isinstance(group_frames, h5py.Group)
-    # load frames dataset
-    dset = group_frames['frames']
-    assert isinstance(dset, h5py.Dataset)
-    hits = dset.astype(np.uint32)[()] # 8 bits is enough for counters
-    assert isinstance(hits, np.ndarray)
-    # flip hitmap along x
-    hits = np.flip(hits, axis=-1)
+    print('mapping size to frames', file=logfile)
+    # replace labels by their sizes
+    cluster_sizes = sizes[labels]
 
-# apply mask
-for index in mask:
-    hits[index] = 0
+    # calculate mean cluster size
+    cluster_sum = np.sum(cluster_sizes, axis=0)
+    cluster_count = np.sum(cluster_sizes != 0, axis=0)
+    cluster_mean = cluster_sum.astype(np.float32) / cluster_count
+    cluster_max = np.max(cluster_sizes, axis=(1, 2))
 
-################################################################################
+    ############################################################################
 
-# only allow connections inside a single frame, not between successive frames
-structure = np.zeros((3, 3, 3), dtype=np.bool8)
-if diagonal:
-    structure[1] = True
-else:
-    # generates plus shaped mask
-    structure[1, 1, :] = True
-    structure[1, :, 1] = True
+    def show_save(name: str):
+        if save is None:
+            plt.title(name)
+            plt.show()
+        else:
+            plt.savefig(save.replace('{}', name))
 
-print('labelling clusters')
-labels = hits # rename
-# replace hits with cluster labels
-scipy.ndimage.label(hits, structure=structure, output=labels)
+    ############################################################################
 
-print('measuring cluster sizes')
-# measure size of each label
-sizes = np.bincount(labels.flat)
-# do not replace zero with anything
-sizes[0] = 0
+    if plot_average:
+        plt.suptitle('Average Cluster Size (Pixels)')
+        plt.imshow(cluster_mean)
+        plt.colorbar()
+        show_save('average')
 
-print('mapping size to frames')
-# replace labels by their sizes
-cluster_sizes = sizes[labels]
+    if not (plot_all or (plot_larger is not None) or (plot_largest is not None)):
+        exit()
 
-# calculate mean cluster size
-cluster_sum = np.sum(cluster_sizes, axis=0)
-cluster_count = np.sum(cluster_sizes != 0, axis=0)
-cluster_mean = cluster_sum.astype(np.float32) / cluster_count
-cluster_max = np.max(cluster_sizes, axis=(1, 2))
+    norm = matplotlib.colors.Normalize(1, np.max(cluster_max))
 
-################################################################################
+    def plot_process(suptitle: str, frame_id: int, filename: str):
+        plt.clf()
+        plt.suptitle(suptitle)
+        frame = cluster_sizes[frame_id]
+        # frame = np.where(frame == 0, np.nan, frame)
+        plt.imshow(frame, norm=norm)
+        plt.colorbar()
+        show_save(filename)
 
-if plot_average:
-    plt.suptitle('Average Cluster Size (Pixels)')
-    plt.imshow(cluster_mean)
-    plt.colorbar()
-    show_save('average')
+    with ProcessPoolExecutor() as pool:
+        futures = []
 
-if not (plot_all or (plot_larger is not None) or (plot_largest is not None)):
-    exit()
+        print('queueing plots', file=logfile)
 
-norm = matplotlib.colors.Normalize(1, np.max(cluster_max))
+        if plot_all:
+            for frame_index in range(len(cluster_sizes)):
+                futures.append(pool.submit(
+                    plot_process,
+                    f'Frame #{frame_index}',
+                    frame_index,
+                    f'all_{frame_index:06d}'
+                ))
 
-def plot_process(suptitle: str, frame_id: int, filename: str):
-    plt.clf()
-    plt.suptitle(suptitle)
-    frame = cluster_sizes[frame_id]
-    # frame = np.where(frame == 0, np.nan, frame)
-    plt.imshow(frame, norm=norm)
-    plt.colorbar()
-    show_save(filename)
+        if plot_larger is not None:
+            frame_indices, = np.where(cluster_max > plot_larger)
+            for file_index, frame_index in enumerate(frame_indices):
+                size = np.max(cluster_max[frame_index])
+                futures.append(pool.submit(
+                    plot_process,
+                    f'Cluster: {size} Pixels',
+                    frame_index,
+                    f'larger_{file_index:06d}'
+                ))
 
-with ProcessPoolExecutor() as pool:
-    futures = []
+        if plot_largest is not None:
+            frame_indices = np.argsort(-cluster_max)
+            frame_indices = frame_indices[:plot_largest]
+            for file_index, frame_index in enumerate(frame_indices):
+                size = np.max(cluster_max[frame_index])
+                futures.append(pool.submit(
+                    plot_process,
+                    f'Cluster: {size} Pixels',
+                    frame_index,
+                    f'largest_{file_index:06d}'
+                ))
 
-    print('queueing plots')
+        print('waiting for plots to finish', file=logfile)
 
-    if plot_all:
-        for frame_index in range(len(cluster_sizes)):
-            futures.append(pool.submit(
-                plot_process,
-                f'Frame #{frame_index}',
-                frame_index,
-                f'all_{frame_index:06d}'
-            ))
+        while futures:
+            futures = list(filter(lambda f: not f.done(), futures))
+            print(f'{len(futures):4d} plots remaining', end='\r', file=logfile)
+            time.sleep(0.1)
+        print('', file=logfile)
+        print('done', file=logfile)
 
-    if plot_larger is not None:
-        frame_indices, = np.where(cluster_max > plot_larger)
-        for file_index, frame_index in enumerate(frame_indices):
-            size = np.max(cluster_max[frame_index])
-            futures.append(pool.submit(
-                plot_process,
-                f'Cluster: {size} Pixels',
-                frame_index,
-                f'larger_{file_index:06d}'
-            ))
+if __name__ =='__main__':
+    import argparse
+    import sys
+    from pathlib import Path
 
-    if plot_largest is not None:
-        frame_indices = np.argsort(-cluster_max)
-        frame_indices = frame_indices[:plot_largest]
-        for file_index, frame_index in enumerate(frame_indices):
-            size = np.max(cluster_max[frame_index])
-            futures.append(pool.submit(
-                plot_process,
-                f'Cluster: {size} Pixels',
-                frame_index,
-                f'largest_{file_index:06d}'
-            ))
+    if True:  # do not reorder with autopep8 or sortimports
+        sys.path.insert(1, str(Path(__file__).parents[2]))
+    from util import parse_ndrange
 
-    print('waiting for plots to finish')
+    ############################################################################
 
-    while futures:
-        futures = list(filter(lambda f: not f.done(), futures))
-        print(f'{len(futures):4d} plots remaining', end='\r')
-        time.sleep(0.1)
-    print('')
-    print('done')
+    parser = argparse.ArgumentParser()
+
+    a_input_file = parser.add_argument(
+        'input_file',
+        help='h5 input file',
+    )
+
+    parser.add_argument('--plot_average', action='store_true')
+    parser.add_argument('--plot_largest', type=int)
+    parser.add_argument('--plot_larger', type=int)
+    parser.add_argument('--plot_all', action='store_true')
+
+    parser.add_argument('--diagonal', action='store_true')
+    parser.add_argument('--h5group', default='frames')
+    parser.add_argument('--mask', action='append')
+    parser.add_argument('--save', help='output image file, use {} as placeholder')
+
+    ############################################################################
+
+    try:
+        import argcomplete
+        from argcomplete.completers import FilesCompleter
+        setattr(a_input_file, 'completer', FilesCompleter('h5'))
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
+
+    ############################################################################
+
+    args = parser.parse_args()
+
+    plot_cluster_size(
+        input_file = args.input_file,
+        h5group = args.h5group,
+        save = args.save,
+        diagonal = args.diagonal,
+        plot_average = args.plot_average,
+        plot_all = args.plot_all,
+        plot_largest = args.plot_largest,
+        plot_larger = args.plot_larger,
+        mask = [
+            (slice(None),) + parse_ndrange(mask_str, 2)
+            for mask_str in (args.mask or [])
+        ],
+        logfile=sys.stderr,
+    )
