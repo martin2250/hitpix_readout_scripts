@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 '''
+ffmpeg -framerate 30 -pattern_type glob -i '*.jpg' test.mp4
 '''
 
 import argparse
+import time
 from typing import Optional
 
 import h5py
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
 from pathlib import Path
 import scipy.ndimage
+from concurrent.futures import ProcessPoolExecutor
 
 if True:  # do not reorder with autopep8 or sortimports
     sys.path.insert(1, str(Path(__file__).parents[2]))
@@ -33,7 +37,7 @@ parser.add_argument('--plot_all', action='store_true')
 parser.add_argument('--diagonal', action='store_true')
 parser.add_argument('--h5group', default='frames')
 parser.add_argument('--mask', action='append')
-parser.add_argument('--save')
+parser.add_argument('--save', help='output image file, use {} as placeholder')
 
 ################################################################################
 
@@ -104,10 +108,10 @@ else:
     structure[1, 1, :] = True
     structure[1, :, 1] = True
 
-print('labeling clusters')
+print('labelling clusters')
 labels = hits # rename
 # replace hits with cluster labels
-num_labels = scipy.ndimage.label(hits, structure=structure, output=labels)
+scipy.ndimage.label(hits, structure=structure, output=labels)
 
 print('measuring cluster sizes')
 # measure size of each label
@@ -133,29 +137,62 @@ if plot_average:
     plt.colorbar()
     show_save('average')
 
-if plot_all:
-    for i, frame in enumerate(cluster_sizes):
-        print(f'plotting nr {i}')
-        plt.suptitle(f'Frame #{i}')
-        plt.imshow(frame)
-        plt.colorbar()
-        show_save(f'all_{i:06d}')
+if not (plot_all or (plot_larger is not None) or (plot_largest is not None)):
+    exit()
 
-if plot_larger is not None:
-    frame_indices = np.where(cluster_max > plot_larger)
-    for i, frame in enumerate(cluster_sizes[frame_indices]):
-        print(f'plotting nr {i} / {len(frame_indices)}', end='\r')
-        size = np.max(frame)
-        plt.suptitle(f'Cluster: {size} Pixels')
-        plt.imshow(frame)
-        show_save(f'larger_{i:06d}')
+norm = matplotlib.colors.Normalize(1, np.max(cluster_max))
 
-if plot_largest is not None:
-    frame_indices = np.argsort(-cluster_max)
-    frame_indices = frame_indices[:plot_largest]
-    for i, frame in enumerate(cluster_sizes[frame_indices]):
-        print(f'plotting nr {i}')
-        size = np.max(frame)
-        plt.suptitle(f'Cluster: {size} Pixels')
-        plt.imshow(frame)
-        show_save(f'largest_{i:06d}')
+def plot_process(suptitle: str, frame_id: int, filename: str):
+    plt.clf()
+    plt.suptitle(suptitle)
+    frame = cluster_sizes[frame_id]
+    # frame = np.where(frame == 0, np.nan, frame)
+    plt.imshow(frame, norm=norm)
+    plt.colorbar()
+    show_save(filename)
+
+with ProcessPoolExecutor() as pool:
+    futures = []
+
+    print('queueing plots')
+
+    if plot_all:
+        for frame_index in range(len(cluster_sizes)):
+            futures.append(pool.submit(
+                plot_process,
+                f'Frame #{frame_index}',
+                frame_index,
+                f'all_{frame_index:06d}'
+            ))
+
+    if plot_larger is not None:
+        frame_indices, = np.where(cluster_max > plot_larger)
+        for file_index, frame_index in enumerate(frame_indices):
+            size = np.max(cluster_max[frame_index])
+            futures.append(pool.submit(
+                plot_process,
+                f'Cluster: {size} Pixels',
+                frame_index,
+                f'larger_{file_index:06d}'
+            ))
+
+    if plot_largest is not None:
+        frame_indices = np.argsort(-cluster_max)
+        frame_indices = frame_indices[:plot_largest]
+        for file_index, frame_index in enumerate(frame_indices):
+            size = np.max(cluster_max[frame_index])
+            futures.append(pool.submit(
+                plot_process,
+                f'Cluster: {size} Pixels',
+                frame_index,
+                f'largest_{file_index:06d}'
+            ))
+
+    print('waiting for plots to finish')
+
+    while futures:
+        futures = list(filter(lambda f: not f.done(), futures))
+        print(f'{len(futures):4d} plots remaining', end='\r')
+        time.sleep(0.1)
+    print('')
+    print('done')
