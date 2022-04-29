@@ -81,7 +81,18 @@ class HitPixSetup:
     def encode_column_config(self, conf: HitPixColumnConfig) -> bitarray.bitarray:
         '''simply repeats column config x times'''
         assert self.chip_rows == 1
-        return self.chip.encode_column_config(conf) * self.chip_columns
+        data = bitarray.bitarray()
+        for col in reversed(range(self.chip_columns)):
+            shift = col * self.chip.columns
+            mask = (1 << self.chip.columns) - 1
+            conf_chip = HitPixColumnConfig(
+                inject_row = conf.inject_row,
+                inject_col = (conf.inject_col >> shift) & mask,
+                ampout_col = (conf.ampout_col >> shift) & mask,
+                rowaddr = conf.rowaddr,
+            )
+            data.extend(self.chip.encode_column_config(conf_chip))
+        return data
 
 ################################################################################
 # helper methods
@@ -132,10 +143,10 @@ def get_readout_latency_hitpix1(clk_div: int, frequency_mhz: float, use_dac: boo
 
     if not clk_div in polyvals_ro:
         raise ValueError(f'no latency data available for {clk_div=}')
-    
+
     polyvals = polyvals_ro[clk_div]
     latency_float = np.poly1d(polyvals)(frequency_mhz)
-    
+
     return round(latency_float)
 
 
@@ -240,6 +251,7 @@ def encode_column_config_hitpix2(conf: HitPixColumnConfig) -> bitarray.bitarray:
     b.reverse()
     return b
 
+
 def get_readout_latency_hitpix2(clk_div: int, frequency_mhz: float, use_dac: bool = False) -> int:
     if use_dac:
         raise ValueError('no data for DAC')
@@ -252,10 +264,10 @@ def get_readout_latency_hitpix2(clk_div: int, frequency_mhz: float, use_dac: boo
 
     if not clk_div in polyvals_ro:
         raise ValueError(f'no latency data available for {clk_div=}')
-    
+
     polyvals = polyvals_ro[clk_div]
     latency_float = np.poly1d(polyvals)(frequency_mhz)
-    
+
     return round(latency_float)
 
 
@@ -349,16 +361,21 @@ hitpix2_single = HitPixSetup(
     readout_div1_clk2=0b000001100000,
 )
 
-hitpix2_row = HitPixSetup(
+hitpix2_1x5 = HitPixSetup(
     chip=hitpix2,
     chip_rows=1,
     chip_columns=5,
-    invert_pins=bitfield(ReadoutPins.ro_ldconfig, ReadoutPins.dac_ld,
-                         ReadoutPins.dac_inv_ck, ReadoutPins.ro_inv_ck),
+    invert_pins=bitfield(
+        ReadoutPins.ro_ldconfig,
+        ReadoutPins.dac_ld,
+        ReadoutPins.dac_inv_ck,
+        ReadoutPins.ro_inv_ck,
+        ReadoutPins.ro_ldcnt,
+    ),
     version_number=2,
-    vc_baseline=(-1, -1),
-    vc_threshold=(-1, -1),
-    vc_injection=(-1, -1),
+    vc_baseline=(0, 0),  # set by voltage divider, not connected!
+    vc_threshold=(0, 1),  # not connected!
+    vc_injection=(2, 0),
     get_readout_latency=get_readout_latency_hitpix2,
     readout_div1_clk1=0b001100000000,
     readout_div1_clk2=0b000001100000,
@@ -368,5 +385,5 @@ hitpix2_row = HitPixSetup(
 setups = {
     'hitpix1': hitpix1_single,
     'hitpix2-1x1': hitpix2_single,
-    'hitpix2-1x5': hitpix2_row,
+    'hitpix2-1x5': hitpix2_1x5,
 }

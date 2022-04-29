@@ -27,7 +27,8 @@ from readout.instructions import Finish, Reset, SetCfg, SetPins, ShiftOut, Sleep
 ############################################################################
 
 # cfg_setup = 'hitpix1'
-cfg_setup = 'hitpix2-1x1'
+# cfg_setup = 'hitpix2-1x1'
+cfg_setup = 'hitpix2-1x5'
 
 cfg_div1_clk1 = hitpix.setups[cfg_setup].readout_div1_clk1
 cfg_div1_clk2 = hitpix.setups[cfg_setup].readout_div1_clk2
@@ -37,14 +38,14 @@ cfg_clkdiv_write = 0
 # cfg_clkdiv_write = 2
 # cfg_clkdiv_write = 3
 
-# cfg_clkdiv_read = None
-cfg_clkdiv_read = 3
+cfg_clkdiv_read = None
+# cfg_clkdiv_read = 3
 
 cfg_shift_latencies = list(range(4, 27))
 
 
-# cfg_select = 'ro'
-cfg_select = 'dac'
+cfg_select = 'ro'
+# cfg_select = 'dac'
 
 # # hitpix 1 default
 # cfg_div1_dtin=0b111111000000
@@ -63,7 +64,7 @@ cfg_voltage = None
 cfg_num_rounds = 10
 # cfg_num_rounds = 20
 
-cfg_freq_range = np.linspace(25, 190, 60)
+cfg_freq_range = np.linspace(16, 35, 30)
 
 # checks
 assert cfg_clkdiv_write in range(4)
@@ -85,8 +86,8 @@ atexit.register(ro.close)
 
 if cfg_voltage is not None:
     vdd_channel = util.voltage_channel.open_voltage_channel(
-        board.default_vdd_driver,
-        'VDD',
+        board.default_vddd_driver,
+        'VDDD',
     )
     vdd_channel.set_voltage(cfg_voltage)
 
@@ -98,7 +99,7 @@ if cfg_select == 'ro':
     setup_registers = ro.setup.pixel_columns * ro.setup.chip.bits_adder
 else:
     # dac, has slow outputs
-    setup_registers = len(ro.setup.chip.dac_config_class.default().generate())
+    setup_registers = ro.setup.chip_columns * len(ro.setup.chip.dac_config_class.default().generate())
 
 test_string = bitarray.util.urandom(setup_registers)
 

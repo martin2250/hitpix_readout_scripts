@@ -263,7 +263,7 @@ def main(
     ro.set_threshold_voltage(config_dict['threshold'])
     ro.set_baseline_voltage(config_dict['baseline'])
 
-    ro.sm_exec(prog_dac_config(dac.generate()))
+    ro.sm_exec(prog_dac_config(dac.generate() * ro.setup.chip_columns))
 
     ############################################################################
     # prepare statemachine
@@ -380,7 +380,7 @@ def main(
             return
         ro.sm_soft_abort()
         ro.wait_sm_idle()
-        ro.sm_exec(prog_dac_config(dac.generate()))
+        ro.sm_exec(prog_dac_config(dac.generate()) * setup.chip_columns)
         start_sm()
 
     buffer_dac = CommandBuffer(

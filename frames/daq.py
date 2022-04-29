@@ -183,7 +183,7 @@ def read_frames(
     ro.set_threshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
-    ro.sm_exec(prog_dac_config(config.dac_cfg.generate()))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate() * ro.setup.chip_columns))
 
     time.sleep(0.025)
 

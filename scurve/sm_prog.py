@@ -13,9 +13,8 @@ def prog_injections_variable(
 ) -> list[Instruction]:
     # parameters
     chip = setup.chip
-    for row in rows:
-        assert row in range(chip.rows)
-    assert setup.chip_rows == setup.chip_columns == 1
+    assert all(row in range(setup.pixel_rows) for row in rows)
+    assert setup.chip_rows == 1
     assert (setup.pixel_columns % simultaneous_injections) == 0
     injection_steps = setup.pixel_columns // simultaneous_injections
     # column config
