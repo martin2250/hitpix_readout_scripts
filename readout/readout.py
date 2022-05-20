@@ -100,6 +100,8 @@ class Readout:
     ADDR_MMCM_CONFIG_1 = 0x21
     ADDR_MMCM_CONFIG_2 = 0x22
     ADDR_RO_CLKS_DIV1 = 0x30
+    ADDR_RO_CLK1_DIV2 = 0x31
+    ADDR_RO_CLK2_DIV2 = 0x32
     ADDR_VERSION = 0xf0
     ADDR_CTR_COMM_RX = 0xd0
     ADDR_CTR_COMM_TX = 0xd1
@@ -264,10 +266,16 @@ class Readout:
         self.comm.send_packet(bytes([self.CMD_FUNCTION_CARD]) + data)
         assert resp.event.wait()
 
-    def set_readout_clock_sequence(self, clk1: int, clk2: int) -> None:
+    def set_readout_clock_sequence_div1(self, clk1: int, clk2: int) -> None:
         assert clk1 in range(1 << 12)
         assert clk2 in range(1 << 12)
         self.write_register(self.ADDR_RO_CLKS_DIV1, (clk2 << 16) | clk1)
+
+    def set_readout_clock_sequence_div2(self, clk1: int, clk2: int) -> None:
+        assert clk1 in range(1 << 24)
+        assert clk2 in range(1 << 24)
+        self.write_register(self.ADDR_RO_CLK1_DIV2, clk1)
+        self.write_register(self.ADDR_RO_CLK2_DIV2, clk2)
 
     def get_readout_clock_sequence(self) -> tuple[int, int]:
         data = self.read_register(self.ADDR_RO_CLKS_DIV1)
@@ -282,7 +290,7 @@ class Readout:
             # check version
             version = self.get_version()
             # supported versions
-            if version.readout not in [0x015, 0x016]:
+            if version.readout not in [0x015, 0x016, 0x017]:
                 raise RuntimeError(
                     f'unsupported readout version 0x{version.readout:04X}')
             # sm prog

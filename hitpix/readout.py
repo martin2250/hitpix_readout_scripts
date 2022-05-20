@@ -62,8 +62,12 @@ class HitPixReadout(Readout):
         # set inverted pins
         self.write_register(self.ADDR_SM_INVERT_PINS, self.setup.invert_pins)
         # set readout clock sequency
-        self.set_readout_clock_sequence(
+        self.set_readout_clock_sequence_div1(
             self.setup.readout_div1_clk1,
             self.setup.readout_div1_clk2,
+        )
+        self.set_readout_clock_sequence_div2(
+            self.setup.readout_div2_clk1,
+            self.setup.readout_div2_clk2,
         )
         self.fast_tx_flush()

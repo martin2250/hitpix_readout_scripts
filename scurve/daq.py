@@ -40,7 +40,7 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
     ro.set_threshold_voltage(config.voltage_threshold)
     ro.set_baseline_voltage(config.voltage_baseline)
 
-    ro.sm_exec(prog_dac_config(config.dac_cfg.generate()))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate() * setup.chip_columns))
 
     time.sleep(0.025)
 
@@ -82,9 +82,9 @@ def measure_scurves(ro: HitPixReadout, fastreadout: FastReadout, config: SCurveC
         # start measurement
         responses.append(fastreadout.expect_response())
         ro.sm_start(num_rounds)
-        ro.wait_sm_idle(8.0)
+        ro.wait_sm_idle(18.0)
 
-    responses[-1].event.wait(8.0)
+    responses[-1].event.wait(18.0)
 
     ############################################################################
     # process data

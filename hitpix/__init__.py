@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import dataclasses
 from enum import IntEnum
 from multiprocessing.sharedctypes import Value
 from typing import Callable
@@ -65,10 +66,14 @@ class HitPixSetup:
     get_readout_latency: Callable[[int, float], int]
     readout_div1_clk1: int
     readout_div1_clk2: int
+    readout_div2_clk1: int
+    readout_div2_clk2: int
 
     vc_baseline: tuple[int, int]  # card slot, channel
     vc_threshold: tuple[int, int]  # card slot, channel
     vc_injection: tuple[int, int]  # card slot, channel
+
+    invert_rx: bool = True
 
     @property
     def pixel_rows(self) -> int:
@@ -86,10 +91,10 @@ class HitPixSetup:
             shift = col * self.chip.columns
             mask = (1 << self.chip.columns) - 1
             conf_chip = HitPixColumnConfig(
-                inject_row = conf.inject_row,
-                inject_col = (conf.inject_col >> shift) & mask,
-                ampout_col = (conf.ampout_col >> shift) & mask,
-                rowaddr = conf.rowaddr,
+                inject_row=conf.inject_row,
+                inject_col=(conf.inject_col >> shift) & mask,
+                ampout_col=(conf.ampout_col >> shift) & mask,
+                rowaddr=conf.rowaddr,
             )
             data.extend(self.chip.encode_column_config(conf_chip))
         return data
@@ -221,8 +226,12 @@ hitpix1_single = HitPixSetup(
     vc_threshold=(0, 1),
     vc_injection=(2, 0),
     get_readout_latency=get_readout_latency_hitpix1,
+    # --------------- 0b111111000000,
     readout_div1_clk1=0b001110000000,
     readout_div1_clk2=0b000001110000,
+    # --------------- 0b111111111111000000000000,
+    readout_div2_clk1=0b000001111100000000000000,
+    readout_div2_clk2=0b000000000000011111000000,
 )
 
 ################################################################################
@@ -357,14 +366,18 @@ hitpix2_single = HitPixSetup(
     vc_threshold=(0, 1),
     vc_injection=(2, 0),
     get_readout_latency=get_readout_latency_hitpix2,
+    # --------------- 0b111111000000,
     readout_div1_clk1=0b001100000000,
     readout_div1_clk2=0b000001100000,
+    # --------------- 0b111111111111000000000000,
+    readout_div2_clk1=0b000001111100000000000000,
+    readout_div2_clk2=0b000000000000011111000000,
 )
 
-hitpix2_1x5 = HitPixSetup(
+hitpix2_1x2_last = HitPixSetup(
     chip=hitpix2,
     chip_rows=1,
-    chip_columns=5,
+    chip_columns=2,
     invert_pins=bitfield(
         ReadoutPins.ro_ldconfig,
         ReadoutPins.dac_ld,
@@ -377,13 +390,20 @@ hitpix2_1x5 = HitPixSetup(
     vc_threshold=(0, 1),  # not connected!
     vc_injection=(2, 0),
     get_readout_latency=get_readout_latency_hitpix2,
+    # --------------- 0b111111000000,
     readout_div1_clk1=0b001100000000,
     readout_div1_clk2=0b000001100000,
+    # --------------- 0b111111111111000000000000,
+    readout_div2_clk1=0b000001111100000000000000,
+    readout_div2_clk2=0b000000000000011111000000,
 )
+
+hitpix2_1x2_first = dataclasses.replace(hitpix2_1x2_last, invert_rx=False)
 
 # keep in sync with defaults.py!!
 setups = {
     'hitpix1': hitpix1_single,
     'hitpix2-1x1': hitpix2_single,
-    'hitpix2-1x5': hitpix2_1x5,
+    'hitpix2-1x2-first': hitpix2_1x2_first,
+    'hitpix2-1x2-last': hitpix2_1x2_last,
 }

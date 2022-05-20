@@ -24,7 +24,7 @@ def prog_read_frames(
     chip = setup.chip
 
     cfg_int = SetCfg(
-        shift_rx_invert=True,
+        shift_rx_invert=setup.invert_rx,
         shift_tx_invert=True,
         shift_toggle=True,
         shift_select_dac=False,
