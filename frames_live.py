@@ -222,7 +222,7 @@ def main(
         if test_ampout:
             slider_values.append(SliderValue(
                 label='ampout_col',
-                extent=(0, setup.pixel_columns - 1),
+                extent=(0, setup.chip.columns - 1),
                 value=0,
             ))
         dac_maxvals = {
@@ -311,7 +311,7 @@ def main(
         nonlocal frame_us_per_packet
         if test_ampout:
             colcfg = HitPixColumnConfig(ampout_col=(1 << ampout_col))
-            data = setup.encode_column_config(colcfg)
+            data = setup.chip.encode_column_config(colcfg) * setup.chip_columns
             ro.sm_exec(prog_col_config(data))
         else:
             num_runs = int(1e6 / (fps * time_frame_us))

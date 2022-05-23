@@ -44,6 +44,11 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    '--plot_range_min',
+    type=float,
+)
+
+parser.add_argument(
     '--print_config',
     action='store_true',
 )
@@ -58,11 +63,20 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    '--total',
+    action='store_true',
+)
+
+parser.add_argument(
     '--label',
 )
 
 parser.add_argument(
     '--title',
+)
+
+parser.add_argument(
+    '--frames',
 )
 
 
@@ -89,9 +103,12 @@ output: Optional[Path] = args.output and Path(args.output)
 print_config: bool = args.print_config
 logx: bool = args.logx
 logy: bool = args.logy
+total: bool = args.total
 plot_range: Optional[float] = args.plot_range
+plot_range_min: Optional[float] = args.plot_range_min
 label: Optional[str] = args.label
 title: Optional[str] = args.title
+frames_range: Optional[str] = args.frames
 
 ################################################################################
 
@@ -128,9 +145,18 @@ with h5py.File(args.input_file) as file:
     assert isinstance(group_frames, h5py.Group)
     config, hit_frames, _, _ = frames.io.load_frames(group_frames)
 
+    # infinite runs
+    if config.num_frames == 0:
+        config.num_frames = hit_frames.shape[0]
+
+if frames_range is not None:
+    start, end = map(int, frames_range.split(':'))
+    hit_frames = hit_frames[start:end]
+
 hit_frames = np.sum(hit_frames, axis=0)
-hit_frames = hit_frames / (config.frame_length_us * config.num_frames * 1e-6)
 hit_frames = np.flip(hit_frames, axis=1)
+if not total:
+    hit_frames = hit_frames / (config.frame_length_us * config.num_frames * 1e-6)
 
 ################################################################################
 
@@ -161,6 +187,7 @@ if title:
 
 ################################################################################
 
+hits_min = plot_range_min or 0
 hits_max = plot_range or np.max(hit_frames)
 
 if plot_type == 'hitmap':
@@ -169,13 +196,16 @@ if plot_type == 'hitmap':
 
     if logy:
         norm = matplotlib.colors.LogNorm(1, hits_max)
+        im_hits = plt.imshow(
+            hit_frames,
+            norm=norm,
+        )
     else:
-        norm = matplotlib.colors.NoNorm(0, hits_max)
-
-    im_hits = plt.imshow(
-        hit_frames,
-        norm=norm,
-    )
+        im_hits = plt.imshow(
+            hit_frames,
+            vmin=hits_min,
+            vmax=hits_max,
+        )
 
     ax.set_ylabel('Pixel Row')
     ax.set_xlabel('Pixel Column')
@@ -192,7 +222,7 @@ if plot_type == 'hitmap':
 
     fig.colorbar(im_hits, ax=ax)
     fig.tight_layout()
-    ax.set_title('Hits/s')
+    ax.set_title('Hits' if total else 'Hits/s')
 elif plot_type == 'histogram':
     raise NotImplementedError()
 else:

@@ -28,7 +28,7 @@ def plot_cluster_size(
     plot_all: bool,
     plot_largest: Optional[int],
     plot_larger: Optional[int],
-    mask: list[tuple[slice, ...]],
+    mask: list[tuple[slice | int, ...]],
     logfile: 'Optional[SupportsWrite[str]]' = None
 ) -> None:
 
@@ -51,10 +51,16 @@ def plot_cluster_size(
         assert isinstance(hits, np.ndarray)
         # flip hitmap along x
         hits = np.flip(hits, axis=-1)
+    
+    # remove frames with no hits -> less memory (hopefully)
+    if not plot_all:
+        hits_per_frame = np.sum(hits, axis=(1, 2))
+        hits = hits[hits_per_frame != 0]
+        del hits_per_frame
 
     # apply mask
     for index in mask:
-        hits[index] = 0
+        hits[(..., *index)] = 0
 
     ############################################################################
 
@@ -100,13 +106,14 @@ def plot_cluster_size(
     ############################################################################
 
     if plot_average:
+        plt.clf()
         plt.suptitle('Average Cluster Size (Pixels)')
         plt.imshow(cluster_mean)
         plt.colorbar()
         show_save('average')
 
     if not (plot_all or (plot_larger is not None) or (plot_largest is not None)):
-        exit()
+        return
 
     norm = matplotlib.colors.Normalize(1, np.max(cluster_max))
 
@@ -217,7 +224,7 @@ if __name__ =='__main__':
         plot_largest = args.plot_largest,
         plot_larger = args.plot_larger,
         mask = [
-            (slice(None),) + parse_ndrange(mask_str, 2)
+            parse_ndrange(mask_str, 2)
             for mask_str in (args.mask or [])
         ],
         logfile=sys.stderr,
