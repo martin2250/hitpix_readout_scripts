@@ -38,7 +38,7 @@ def read_ampout_snr(
         ampout_col = 1 << config.inject_col,
         rowaddr    = -1,
     )
-    ro.sm_exec(prog_dac_config(config.dac_cfg.generate(), 7))
+    ro.sm_exec(prog_dac_config(config.dac_cfg.generate()))
     ro.sm_exec(prog_col_config(setup.encode_column_config(cc), 2))
 
     if not no_readout:

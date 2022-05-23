@@ -53,6 +53,7 @@ def main(
     from hitpix.readout import HitPixReadout
     import hitpix
     from readout.fast_readout import FastReadout
+    from readout.readout import SerialCobsComm
 
     ############################################################################
 
@@ -72,7 +73,7 @@ def main(
             dac_cfg=config_dict['dac'],
             voltage_baseline=config_dict['baseline'],
             voltage_threshold=config_dict['threshold'],
-            voltage_vdd=config_dict['vdd'],
+            voltage_vdd=config_dict['vddd'],
             voltage_vssa=config_dict['vssa'],
             injection_pulse_us=config_dict['pulse_us'],
             injection_pause_us=config_dict['pause_us'],
@@ -100,14 +101,16 @@ def main(
     )
 
     time.sleep(0.05)
-    ro = HitPixReadout(serial_port_name, setup)
+    ro = HitPixReadout(SerialCobsComm(serial_port_name), setup)
     ro.initialize()
     atexit.register(ro.close)
+
+    ro.set_system_clock(25)
 
     ############################################################################
 
     if vdd_driver == 'default':
-        vdd_driver = board.default_vdd_driver
+        vdd_driver = board.default_vddd_driver
 
     if vssa_driver == 'default':
         vssa_driver = board.default_vssa_driver
