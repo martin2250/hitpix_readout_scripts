@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 from rich import print
 from rich.progress import Progress, TaskID
-from hitpix import HitPixSetup
+from hitpix import HitPix2DacConfig, HitPixSetup
 from hitpix.readout import HitPixReadout
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish
@@ -16,7 +16,7 @@ from readout.sm_prog import decode_column_packets, prog_dac_config
 from util.time_sync import TimeSync
 
 from .io import FrameConfig
-from .sm_prog import prog_read_adders, prog_read_frames
+from .sm_prog import prog_read_adders, prog_read_adders_parallel, prog_read_frames, prog_read_frames_parallel
 
 def print_exceptions(f):
     def g(*args, **kwargs):
@@ -76,19 +76,18 @@ def _decode_responses(
         # decode hits
         block_timestamps, block_frames = decode_column_packets(
             data,
-            setup.pixel_columns,
+            setup.decode_columns,
             setup.chip.bits_adder,
             None,  # setup.chip.bits_counter,
         )
-        block_frames = block_frames.reshape(
-            -1,
-            read_adders + num_rows,
-            setup.pixel_columns,
-        )
+        # reshape
+        block_frames = setup.reshape_data(block_frames, read_adders + num_rows)
+
         block_numframes = block_frames.shape[0]
 
         # extract relevant timestamps
-        block_timestamps = block_timestamps[::read_adders + num_rows]
+        ts_stride = block_timestamps.size // block_numframes
+        block_timestamps = block_timestamps[::ts_stride]
 
         # extract adder values from first row
         block_adders = np.empty(0, dtype=np.uint32)
@@ -197,26 +196,49 @@ def read_frames(
     frame_cycles = int(ro.frequency_mhz * config.frame_length_us)
     pause_cycles = int(ro.frequency_mhz * config.pause_length_us)
 
+    assert isinstance(config.dac_cfg, HitPix2DacConfig)
+
     if rows:
-        prog_init, prog_readout = prog_read_frames(
-            frame_cycles=frame_cycles,
-            pulse_cycles=pulse_cycles,
-            pause_cycles=pause_cycles,
-            reset_counters=config.reset_counters,
-            setup=setup,
-            frequency=config.readout_frequency,
-            # convert rows from np.int64
-            rows=rows,
-            read_adders=config.read_adders,
-        )
+        if setup.parallel_readout:
+            prog_init, prog_readout = prog_read_frames_parallel(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                reset_counters=config.reset_counters,
+                setup=setup,
+                frequency=config.readout_frequency,
+                rows=rows,
+                dac_config=config.dac_cfg,
+            )
+        else:
+            prog_init, prog_readout = prog_read_frames(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                reset_counters=config.reset_counters,
+                setup=setup,
+                frequency=config.readout_frequency,
+                rows=rows,
+                read_adders=config.read_adders,
+            )
     else:
-        prog_init, prog_readout = prog_read_adders(
-            frame_cycles=frame_cycles,
-            pulse_cycles=pulse_cycles,
-            pause_cycles=pause_cycles,
-            frequency=config.readout_frequency,
-            setup=setup,
-        )
+        if setup.parallel_readout:
+            prog_init, prog_readout = prog_read_adders_parallel(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                frequency=config.readout_frequency,
+                setup=setup,
+                dac_config=config.dac_cfg,
+            )
+        else:
+            prog_init, prog_readout = prog_read_adders(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                frequency=config.readout_frequency,
+                setup=setup,
+            )
     prog_init.append(Finish())
     prog_readout.append(Finish())
 

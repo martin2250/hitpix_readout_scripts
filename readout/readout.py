@@ -290,7 +290,7 @@ class Readout:
             # check version
             version = self.get_version()
             # supported versions
-            if version.readout not in [0x015, 0x016, 0x017]:
+            if version.readout not in [0x015, 0x016, 0x017, 0x018]:
                 raise RuntimeError(
                     f'unsupported readout version 0x{version.readout:04X}')
             # sm prog

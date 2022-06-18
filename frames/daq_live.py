@@ -10,7 +10,7 @@ from typing import Callable, Optional
 import h5py
 import numpy as np
 from rich import print
-from hitpix import HitPixSetup
+from hitpix import HitPix2DacConfig, HitPixDacConfig, HitPixSetup
 from hitpix.readout import HitPixReadout
 from readout.fast_readout import FastReadout
 from readout.instructions import Finish, count_cycles
@@ -18,7 +18,7 @@ from readout.sm_prog import decode_column_packets, prog_dac_config
 from util.time_sync import TimeSync
 
 from .io import FrameConfig
-from .sm_prog import prog_read_adders, prog_read_frames
+from .sm_prog import prog_read_adders, prog_read_adders_parallel, prog_read_frames, prog_read_frames_parallel
 
 from dataclasses import dataclass
 
@@ -35,6 +35,7 @@ def live_write_statemachine(
     config: FramesLiveSmConfig,
     rows: list[int],
     reset_counters: bool,
+    dac_config: Optional[HitPix2DacConfig],
 ) -> float:
     '''returns time for single frame in us'''
     pulse_cycles = math.ceil(config.pulse_ns * ro.frequency_mhz / 1000)
@@ -42,24 +43,48 @@ def live_write_statemachine(
     pause_cycles = int(ro.frequency_mhz * config.pause_us)
 
     if rows:
-        prog_init, prog_readout = prog_read_frames(
-            frame_cycles=frame_cycles,
-            pulse_cycles=pulse_cycles,
-            pause_cycles=pause_cycles,
-            reset_counters=reset_counters,
-            setup=ro.setup,
-            frequency=ro.frequency_mhz,
-            rows=rows,
-            read_adders=False,
-        )
+        if ro.setup.parallel_readout:
+            assert dac_config is not None
+            prog_init, prog_readout = prog_read_frames_parallel(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                reset_counters=reset_counters,
+                setup=ro.setup,
+                frequency=ro.frequency_mhz,
+                rows=rows,
+                dac_config=dac_config,
+            )
+        else:
+            prog_init, prog_readout = prog_read_frames(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                reset_counters=reset_counters,
+                setup=ro.setup,
+                frequency=ro.frequency_mhz,
+                rows=rows,
+                read_adders=False,
+            )
     else:
-        prog_init, prog_readout = prog_read_adders(
-            frame_cycles=frame_cycles,
-            pulse_cycles=pulse_cycles,
-            pause_cycles=pause_cycles,
-            frequency=ro.frequency_mhz,
-            setup=ro.setup,
-        )
+        if ro.setup.parallel_readout:
+            assert dac_config is not None
+            prog_init, prog_readout = prog_read_adders_parallel(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                frequency=ro.frequency_mhz,
+                setup=ro.setup,
+                dac_config=dac_config,
+            )
+        else:
+            prog_init, prog_readout = prog_read_adders(
+                frame_cycles=frame_cycles,
+                pulse_cycles=pulse_cycles,
+                pause_cycles=pause_cycles,
+                frequency=ro.frequency_mhz,
+                setup=ro.setup,
+            )
     prog_init.append(Finish())
     prog_readout.append(Finish())
 
@@ -93,7 +118,7 @@ def live_decode_responses(
             # decode hits
             _, block_frames = decode_column_packets(
                 data,
-                setup.pixel_columns,
+                setup.decode_columns,
                 setup.chip.bits_adder,
                 None,
             )
@@ -114,11 +139,7 @@ def live_decode_responses(
                 block_adders =  np.sum(block_adders, axis=0)
                 callback(block_adders)
             else:
-                block_frames = block_frames.reshape(
-                    -1,
-                    num_rows,
-                    setup.pixel_columns,
-                )
+                block_frames = setup.reshape_data(block_frames, num_rows)
                 block_frames = np.bitwise_and(block_frames, mask_counters)
                 # counters not reset? apply diff between frames
                 if not reset_counters:

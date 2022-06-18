@@ -1,4 +1,4 @@
-from hitpix import HitPixColumnConfig, ReadoutPins, HitPixSetup
+from hitpix import HitPix2DacConfig, HitPixColumnConfig, ReadoutPins, HitPixSetup
 from readout.instructions import *
 from readout.sm_prog import prog_shift_dense
 
@@ -13,8 +13,7 @@ def prog_injections_variable(
 ) -> list[Instruction]:
     # parameters
     chip = setup.chip
-    assert all(row in range(setup.pixel_rows) for row in rows)
-    assert setup.chip_rows == 1
+    assert all(row in range(setup.chip.rows) for row in rows)
     assert (setup.pixel_columns % simultaneous_injections) == 0
     injection_steps = setup.pixel_columns // simultaneous_injections
     # column config
@@ -35,7 +34,7 @@ def prog_injections_variable(
         )
     # default configuration
     cfg_int = SetCfg(
-        shift_rx_invert=setup.invert_rx,
+        shift_rx_invert=True,
         shift_tx_invert=True,
         shift_toggle=True,
         shift_select_dac=False,

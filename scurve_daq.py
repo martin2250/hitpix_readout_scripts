@@ -53,7 +53,7 @@ def main(
     injection_voltage = util.gridscan.parse_range(injection_voltage_range)
     # rows
     if rows_str == 'all':
-        rows = np.arange(setup.pixel_rows, dtype=np.uint)
+        rows = np.arange(setup.chip.rows, dtype=np.uint)
     else:
         rows = np.array(util.gridscan.parse_int_range(rows_str), dtype=np.uint)
     scan_parameters, scan_shape = util.gridscan.parse_scan(args_scan)

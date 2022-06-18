@@ -44,7 +44,8 @@ settings_default = {
 setups = [
     'hitpix1',
     'hitpix2-1x1',
-    'hitpix2-1x5',
+    'hitpix2-1x2-first',
+    'hitpix2-1x2-last',
 ]
 
 setup_dac_defaults = {

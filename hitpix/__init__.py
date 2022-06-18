@@ -58,7 +58,6 @@ class HitPixVersion:
 @dataclass
 class HitPixSetup:
     chip: HitPixVersion
-    chip_rows: int  # should always be 1 for now
     chip_columns: int
     invert_pins: int
     version_number: int
@@ -73,11 +72,25 @@ class HitPixSetup:
     vc_threshold: tuple[int, int]  # card slot, channel
     vc_injection: tuple[int, int]  # card slot, channel
 
-    invert_rx: bool = True
+    reshape_data: Callable[[np.ndarray, int], np.ndarray]
+
+    clkdiv_ro: int = 0
+    clkdiv_dac: int = 0
+
+    # all sin and differential sout are connected in parallel
+    parallel_readout: bool = False
+
+    # how many separate sout lines are there?
+    num_chains: int = 1
+
+
 
     @property
-    def pixel_rows(self) -> int:
-        return self.chip_rows * self.chip.rows
+    def decode_columns(self) -> int:
+        if self.parallel_readout:
+            return self.chip.columns
+        else:
+            return self.chip_columns * self.chip.columns
 
     @property
     def pixel_columns(self) -> int:
@@ -85,7 +98,6 @@ class HitPixSetup:
 
     def encode_column_config(self, conf: HitPixColumnConfig) -> bitarray.bitarray:
         '''simply repeats column config x times'''
-        assert self.chip_rows == 1
         data = bitarray.bitarray()
         for col in reversed(range(self.chip_columns)):
             shift = col * self.chip.columns
@@ -215,9 +227,13 @@ hitpix1 = HitPixVersion(
     dac_config_class=HitPix1DacConfig,
 )
 
+def reshape_data_hitpix1_single(din: np.ndarray, numrows: int) -> np.ndarray:
+    assert din.ndim == 2
+    assert din.shape[1] == 24
+    return np.reshape(din, (-1, numrows, 24))
+
 hitpix1_single = HitPixSetup(
     chip=hitpix1,
-    chip_rows=1,
     chip_columns=1,
     invert_pins=bitfield(ReadoutPins.ro_ldconfig, ReadoutPins.dac_ld,
                          ReadoutPins.dac_inv_ck, ReadoutPins.ro_inv_ck),
@@ -232,6 +248,8 @@ hitpix1_single = HitPixSetup(
     # --------------- 0b111111111111000000000000,
     readout_div2_clk1=0b000001111100000000000000,
     readout_div2_clk2=0b000000000000011111000000,
+    #
+    reshape_data=reshape_data_hitpix1_single,
 )
 
 ################################################################################
@@ -350,9 +368,13 @@ hitpix2 = HitPixVersion(
     dac_config_class=HitPix2DacConfig,
 )
 
+def reshape_data_hitpix2_single(din: np.ndarray, numrows: int) -> np.ndarray:
+    assert din.ndim == 2
+    assert din.shape[1] == 48
+    return np.reshape(din, (-1, numrows, 48))
+
 hitpix2_single = HitPixSetup(
     chip=hitpix2,
-    chip_rows=1,
     chip_columns=1,
     invert_pins=bitfield(
         ReadoutPins.ro_ldconfig,
@@ -372,11 +394,29 @@ hitpix2_single = HitPixSetup(
     # --------------- 0b111111111111000000000000,
     readout_div2_clk1=0b000001111100000000000000,
     readout_div2_clk2=0b000000000000011111000000,
+    clkdiv_ro = 1,
+    reshape_data=reshape_data_hitpix2_single,
 )
+
+def reshape_data_hitpix2_1x2_last(din: np.ndarray, numrows: int) -> np.ndarray:
+    assert din.ndim == 2
+    assert din.shape[1] == 48
+
+    din = din.reshape(
+        -1,
+        2, # 2 chips
+        numrows,
+        48,
+    )
+    din = np.swapaxes(din, 1, 2)
+    return din.reshape(
+        -1,
+        numrows,
+        2 * 48,
+    )
 
 hitpix2_1x2_last = HitPixSetup(
     chip=hitpix2,
-    chip_rows=1,
     chip_columns=2,
     invert_pins=bitfield(
         ReadoutPins.ro_ldconfig,
@@ -396,9 +436,28 @@ hitpix2_1x2_last = HitPixSetup(
     # --------------- 0b111111111111000000000000,
     readout_div2_clk1=0b000001111100000000000000,
     readout_div2_clk2=0b000000000000011111000000,
+    clkdiv_ro = 1,
+    #
+    parallel_readout = True,
+    reshape_data=reshape_data_hitpix2_1x2_last,
 )
 
-hitpix2_1x2_first = dataclasses.replace(hitpix2_1x2_last, invert_rx=False)
+def reshape_data_hitpix2_1x2_first(din: np.ndarray, numrows: int) -> np.ndarray:
+    assert din.ndim == 2
+    assert din.shape[1] == 48
+
+    return din.reshape(
+        -1,
+        numrows,
+        2 * 48,
+    )
+
+hitpix2_1x2_first = dataclasses.replace(
+    hitpix2_1x2_last,
+    version_number=3,
+    parallel_readout=False,
+    reshape_data=reshape_data_hitpix2_1x2_first,
+)
 
 # keep in sync with defaults.py!!
 setups = {

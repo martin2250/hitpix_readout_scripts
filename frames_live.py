@@ -1,18 +1,10 @@
 #!/usr/bin/env python3.10
 
 from dataclasses import dataclass, field
-import dataclasses
-import math
 import queue
 from threading import Thread
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Optional
 
-from matplotlib.pyplot import pause
-from numpy import isin
-from frames.daq_live import FramesLiveSmConfig, live_decode_responses, live_write_statemachine
-from hitpix import HitPixColumnConfig
-
-from readout.sm_prog import prog_col_config, prog_dac_config
 
 
 def __get_config_dict_ext() -> dict:
@@ -56,6 +48,11 @@ def main(
     from readout.readout import SerialCobsComm
     from util.live_view.frames import LiveViewAdders, LiveViewFrames
     from util.voltage_channel import open_voltage_channel
+    from frames.daq_live import FramesLiveSmConfig, live_decode_responses, live_write_statemachine
+    from hitpix import HitPix2DacConfig, HitPixColumnConfig
+
+    from readout.sm_prog import prog_col_config, prog_dac_config
+
 
     ############################################################################
 
@@ -66,7 +63,7 @@ def main(
         if read_adders:
             rows = []
         else:
-            rows = list(range(setup.pixel_rows))
+            rows = list(range(setup.chip.rows))
 
     else:
         assert not read_adders
@@ -280,6 +277,7 @@ def main(
         sm_config,
         rows,
         reset_counters,
+        dac if isinstance(dac, HitPix2DacConfig) else None,
     )
 
     ############################################################################
@@ -384,7 +382,7 @@ def main(
         start_sm()
 
     buffer_dac = CommandBuffer(
-        matches=lambda name: name.startswith('dac.'),
+        matches=lambda name: name.startswith('dac.') and (not setup.parallel_readout),
         callback=buffer_cb_dac,
     )
 
@@ -396,6 +394,14 @@ def main(
                 ampout_col = value
                 update = True
                 print(f'{name} = {value}')
+                continue
+            if name.startswith('dac.') and isinstance(value, int):
+                name = name.removeprefix('dac.')
+                if not hasattr(dac, name):
+                    continue
+                setattr(dac, name, value)
+                print(f'{name} = {value}')
+                update = True
                 continue
             if not (isinstance(name, str) and isinstance(value, float)):
                 continue
@@ -414,12 +420,13 @@ def main(
                 sm_config,
                 rows,
                 reset_counters,
+                dac if isinstance(dac, HitPix2DacConfig) else None,
             )
         start_sm()
             
 
     buffer_sm_prog = CommandBuffer(
-        matches=lambda name: name in {'pulse_ns', 'frame_us', 'pause_us', 'ampout_col'},
+        matches=lambda name: (name in {'pulse_ns', 'frame_us', 'pause_us', 'ampout_col'}) or (setup.parallel_readout and name.startswith('dac.')),
         callback=buffer_cb_sm_prog,
     )
 
