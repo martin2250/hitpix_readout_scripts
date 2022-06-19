@@ -43,7 +43,7 @@ class Keithley2400VoltageChannel(VoltageChannel):
         self.smu.shutdown()
         self.smu.reset()
         time.sleep(0.1)
-        self.smu.apply_voltage(compliance_current=120e-6)
+        self.smu.apply_voltage(compliance_current=500e-6)
         self.smu.measure_voltage()
         self.smu.auto_range_source()
     

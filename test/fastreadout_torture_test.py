@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 
+
 if True:  # do not reorder with autopep8 or sortimports
     sys.path.insert(1, str(Path(__file__).parents[1]))
 
@@ -14,18 +15,19 @@ import time
 
 import tqdm
 import util.configuration
+from readout.readout import Readout, SerialCobsComm
 import util.gridscan
 import util.voltage_channel
 from hitpix.readout import HitPixReadout
 import hitpix, hitpix.defaults
 from readout import fast_readout
 from readout.fast_readout import FastReadout
-from readout.instructions import Finish, GetTime, Sleep
+from readout.instructions import Finish, GetTime, Instruction, Sleep
 
 ############################################################################
 
 cfg_words_per_prog = 8000 # less than 8kbytes per prog
-cfg_prog_per_round = 5000 # 40MB per run -> approx 1s
+cfg_prog_per_round = 500 # 40MB per run -> approx 1s
 cfg_rounds = 86400
 
 cfg_len_expect = cfg_words_per_prog * cfg_prog_per_round * 4
@@ -40,17 +42,18 @@ fastreadout = FastReadout(board.fastreadout_serial_number)
 atexit.register(fastreadout.close)
 time.sleep(0.05)
 
-ro = HitPixReadout(serial_port_name, hitpix.setups[hitpix.defaults.setups[0]])
+ro = Readout(SerialCobsComm(serial_port_name))
 ro.initialize()
 atexit.register(ro.close)
 
 ############################################################################
 # readout program
 
-prog = [
+prog: list[Instruction] = [
     GetTime(),
     # Sleep(4),
 ] * cfg_words_per_prog
+prog.append(Sleep(10))
 prog.append(Finish())
 
 ro.sm_write(prog)
@@ -68,7 +71,7 @@ def receive():
     while running or not q_resp.empty():
         resp: fast_readout.Response = q_resp.get()
         q_resp.task_done()
-        if not resp.event.wait(45.0):
+        if not resp.event.wait(5.0):
             print('no response received')
             error = True
             continue
@@ -89,7 +92,7 @@ try:
     for _ in tqdm.tqdm(range(cfg_rounds), dynamic_ncols=True):
         q_resp.put(fastreadout.expect_response())
         ro.sm_start(cfg_prog_per_round)
-        ro.wait_sm_idle(45.0)
+        ro.wait_sm_idle(5.0)
         if error:
             print('aborting due to error')
             break

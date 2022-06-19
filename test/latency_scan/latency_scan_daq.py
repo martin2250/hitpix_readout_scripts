@@ -5,16 +5,18 @@ import sys
 from pathlib import Path
 
 
+
 if True:  # do not reorder with autopep8 or sortimports
     sys.path.insert(1, str(Path(__file__).parents[2]))
 
+from readout import sm_prog
 import atexit
 import time
 import bitarray.util
 import bitarray
 import numpy as np
 import util.configuration
-from readout.sm_prog import prog_shift_dense, prog_sleep
+from readout.sm_prog import prog_dac_config, prog_shift_dense, prog_sleep
 import util.gridscan
 import util.voltage_channel
 from hitpix.readout import HitPixReadout
@@ -28,21 +30,29 @@ from readout.instructions import Finish, Reset, SetCfg, SetPins, ShiftOut, Sleep
 
 # cfg_setup = 'hitpix1'
 # cfg_setup = 'hitpix2-1x1'
-cfg_setup = 'hitpix2-1x5'
+cfg_setup = 'hitpix2-1x2-last'
 
 cfg_div1_clk1 = hitpix.setups[cfg_setup].readout_div1_clk1
 cfg_div1_clk2 = hitpix.setups[cfg_setup].readout_div1_clk2
+cfg_div2_clk1 = hitpix.setups[cfg_setup].readout_div2_clk1
+cfg_div2_clk2 = hitpix.setups[cfg_setup].readout_div2_clk2
 
-cfg_clkdiv_write = 0
-# cfg_clkdiv_write = 1
+# cfg_clkdiv_write = 0
+cfg_clkdiv_write = 1
 # cfg_clkdiv_write = 2
 # cfg_clkdiv_write = 3
 
 cfg_clkdiv_read = None
 # cfg_clkdiv_read = 3
 
-cfg_shift_latencies = list(range(4, 27))
+cfg_shift_latencies = list(range(0, 40))
 
+# which chip to activate
+# when using a setup with the chips in a bus configuration, this config setting
+# chooses which chip should have its differential output enabled.
+# None = no chip is activated
+# cfg_dac_activate = None
+cfg_dac_activate = 0
 
 cfg_select = 'ro'
 # cfg_select = 'dac'
@@ -57,14 +67,18 @@ cfg_select = 'ro'
 # cfg_div1_clk1=0b001100000000
 # cfg_div1_clk2=0b000001100000
 
+# # ----------- 0b111111111111000000000000
+# cfg_div2_clk1=0b000000011110000000000000
+# cfg_div2_clk2=0b000000000000011110000000
+
 # cfg_voltage = 1.85
 cfg_voltage = None
 
 
+# cfg_num_rounds = 1
 cfg_num_rounds = 10
-# cfg_num_rounds = 20
 
-cfg_freq_range = np.linspace(16, 35, 30)
+cfg_freq_range = np.linspace(17, 75, 40)
 
 # checks
 assert cfg_clkdiv_write in range(4)
@@ -101,7 +115,14 @@ else:
     # dac, has slow outputs
     setup_registers = ro.setup.chip_columns * len(ro.setup.chip.dac_config_class.default().generate())
 
+if cfg_dac_activate is not None:
+    setup_registers = ro.setup.chip.columns * ro.setup.chip.bits_adder
+
 test_string = bitarray.util.urandom(setup_registers)
+# test_string = bitarray.bitarray()
+# test_string.frombytes(b'hello' + b'\x00'*1000)
+# test_string = test_string[:setup_registers]
+# test_string = test_string + test_string
 
 if cfg_clkdiv_read is None:
     if cfg_select == 'ro':
@@ -137,7 +158,7 @@ def test_shift_register(
         shift_sample_latency=shift_sample_latency,
     )
     cfg_read = cfg_write.modify(shift_clk_div=shift_clk_div_read)
-    cfg_clear = cfg_write.modify(shift_clk_div=3)  # clear shift register
+    cfg_clear = cfg_write.modify(shift_clk_div=shift_clk_div_read)  # clear shift register
 
     # sm prog
     prog = [
@@ -160,11 +181,14 @@ def test_shift_register(
         prog += [
             # wait for previous read to finish (takes 64 clock cycles with clkdiv 3)
             Sleep(64),
+            Sleep(64),
+            Sleep(64),
             cfg_read.modify(shift_word_len=read_remaining),
             ShiftOut(read_remaining, True),
         ]
     prog += [
         Sleep(64),
+        *prog_sleep(int(100e-6 * ro.frequency_mhz)),
         *prog_sleep(int(100e-6 * ro.frequency_mhz)),
         Finish(),
     ]
@@ -214,9 +238,10 @@ for f in cfg_freq_range:
 
 ################################################################################
 
-date = datetime.now().date().isoformat()
+date = datetime.now().isoformat()
 ro_version = ro.get_version()
-filename = f'{date}-{cfg_setup}-{cfg_select}-v{ro_version.readout:03x}-div{cfg_clkdiv_write}-cks-{cfg_div1_clk1}-{cfg_div1_clk2}-latency.dat'
+filename = f'{date}-{cfg_setup}-{cfg_select}-div{cfg_clkdiv_write}-latency.dat'
+only_errors_cnt = 0
 
 with open(filename, 'w') as f_out:
     print(f'# latency scan', file=f_out)
@@ -227,8 +252,11 @@ with open(filename, 'w') as f_out:
     print(f'# {cfg_clkdiv_read=}', file=f_out)
     print(f'# {cfg_select=}', file=f_out)
     print(f'# {ro_version=}', file=f_out)
-    print(f'# {cfg_div1_clk1=:12b}', file=f_out)
-    print(f'# {cfg_div1_clk2=:12b}', file=f_out)
+    print(f'# {cfg_div1_clk1=:012b}', file=f_out)
+    print(f'# {cfg_div1_clk2=:012b}', file=f_out)
+    print(f'# {cfg_div2_clk1=:024b}', file=f_out)
+    print(f'# {cfg_div2_clk2=:024b}', file=f_out)
+    print(f'# {cfg_dac_activate=}', file=f_out)
     print(f'# latencies\t' + '\t'.join(str(int(l))
           for l in cfg_shift_latencies), file=f_out)
     print(f'# frequency (MHz)\t' +
@@ -237,7 +265,17 @@ with open(filename, 'w') as f_out:
     for freq in frequencies:
         ro.set_system_clock(freq)
 
-        ro.set_readout_clock_sequence(cfg_div1_clk1, cfg_div1_clk2)
+        ro.set_readout_clock_sequence_div1(cfg_div1_clk1, cfg_div1_clk2)
+        ro.set_readout_clock_sequence_div2(cfg_div2_clk1, cfg_div2_clk2)
+
+        if cfg_dac_activate is not None:
+            assert cfg_select == 'ro'
+            dac_bits = bitarray.bitarray()
+            for i in range(ro.setup.chip_columns):
+                dac = hitpix.HitPix2DacConfig(**hitpix.defaults.dac_default_hitpix2)
+                dac.enable_output_diff = i == cfg_dac_activate
+                dac_bits.extend(dac.generate())
+            ro.sm_exec(sm_prog.prog_dac_config(dac_bits))
 
         test_shift_register(
             ro=ro,
@@ -258,6 +296,8 @@ with open(filename, 'w') as f_out:
 
             errors = 0
             for r in res:
+                print(r[:64])
+                print(test_string[:64])
                 diff = r ^ test_string
                 diff_sum = diff.count(1)
                 errors += diff_sum
@@ -271,3 +311,10 @@ with open(filename, 'w') as f_out:
         line = f'{freq:0.3f}\t' + '\t'.join(str(ec) for ec in error_counts)
         print(line, file=f_out, flush=True)
         print(line)
+
+        if min(error_counts) > 0:
+            only_errors_cnt += 1
+        
+        if only_errors_cnt > 0:
+            break
+
